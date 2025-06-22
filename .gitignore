@@ -3,6 +3,7 @@ models/
 references/
 reports/
 logs.log
+.ipynb_checkpoints/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

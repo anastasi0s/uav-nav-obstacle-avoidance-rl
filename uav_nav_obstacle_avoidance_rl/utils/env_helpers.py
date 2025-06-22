@@ -1,12 +1,15 @@
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecVideoRecorder
+import numpy as np
+import loguru
 
-from uav_rl_navigation.environment.vector_voyager_env import VectorVoyagerEnv
-from uav_rl_navigation.vendor.pyflyt import FlattenVectorVoyagerEnv
-from uav_rl_navigation.environment.cam_wrapper import ThirdPersonCamWrapper
-from uav_rl_navigation.environment.metrics_wrapper import UAVMetricsWrapper
+from uav_nav_obstacle_avoidance_rl.environment.vector_voyager_env import VectorVoyagerEnv
+from uav_nav_obstacle_avoidance_rl.environment.cam_wrapper import ThirdPersonCamWrapper
+# from uav_nav_obstacle_avoidance_rl.environment.metrics_wrapper import UAVMetricsWrapper
+from uav_nav_obstacle_avoidance_rl.vendor.pyflyt import FlattenVectorVoyagerEnv
 
 
+# create flat pyflyt environment
 def make_flat_voyager(num_waypoints: int = 1, with_metrics: bool = False, **env_kwargs):
     """
     Create a flattened Vector Voyager environment.
@@ -22,13 +25,14 @@ def make_flat_voyager(num_waypoints: int = 1, with_metrics: bool = False, **env_
     # Add flattening wrapper
     env = FlattenVectorVoyagerEnv(env, context_length=num_waypoints)
     
-    # Optionally add metrics wrapper
-    if with_metrics:
-        env = UAVMetricsWrapper(env)
+    # # Optionally add metrics wrapper
+    # if with_metrics:
+    #     env = UAVMetricsWrapper(env)
     
     return env
 
 
+# create vectorized environment for video recording
 def make_voyager_for_recording(video_folder, video_length, video_name, num_waypoints: int = 1, with_metrics: bool = False, **env_kwargs):
     """
     Create environment for video recording with third-person camera and optional metrics.
@@ -52,5 +56,41 @@ def make_voyager_for_recording(video_folder, video_length, video_name, num_waypo
 
     return env
 
+# analyse environment characteristics
+def analyse_env(env):
+    # reset
+    out = env.reset()
+    if hasattr(env, "num_envs"):
+        obs = out  # VecEnv only returns obs
+        n = env.num_envs
+        # build batch of actions
+        actions = np.stack([env.action_space.sample() for _ in range(n)])
+        batch = env.step(actions)
+        # VecEnv.step returns (obs, rewards, dones, infos)
+        obs2, rews, dones, infos = batch
+        loguru.logger.info(f"VecEnv:\n\nObs space:\n{env.observation_space}\n\nStacked obs sample:\n{obs}\n\nAction space:\n{env.action_space}\n\nStacked actions sample:\n{actions}\n\nStacked reward samples:\n{rews}\n\nAdditional monitored info:\n{infos}\n")
+    else:
+        obs, info = out  # single env returns (obs, info)
+        action = env.action_space.sample()
+        obs2, rew, term, trunc, info2 = env.step(action)
+        loguru.logger.info(f"Single Env:\n\nObs space:\n{env.observation_space}\n\nObs sample:\n{obs}\n\nAction space:\n{env.action_space}\n\nAction sample:\n{action}\n\nReward sample:\n{rew}\n\nAdditional monitored infos:\n{info2}\n")
 
+    # only vec environments have the env.envs attribute
+    if hasattr(env, "envs"):
+        inner_env = env.envs[0]  # grab the first inner env
+    else:
+        inner_env = env.env
 
+    chain = []
+    chain.append(type(env).__name__)  # add the name of the outer most env
+    
+    # now peel off the rest of the wrappers
+    current = inner_env
+    while True:
+        chain.append(type(current).__name__)
+        # most wrappers keep the inner env in .env
+        if not hasattr(current, "env"):
+            break
+        current = current.env
+
+    loguru.logger.info(f"Wrapper chain (outer -> inner): {"->".join(chain)}")

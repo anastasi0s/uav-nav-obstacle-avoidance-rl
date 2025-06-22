@@ -11,21 +11,13 @@ PROJ_ROOT = Path(__file__).resolve().parents[1]
 logger.info(f"PROJ_ROOT path is: {PROJ_ROOT}")
 
 MODELS_DIR = PROJ_ROOT / "models"
-
 REPORTS_DIR = PROJ_ROOT / "reports"
-TRAIN_RESULTS = REPORTS_DIR / "training_results"
-EVAL_RESULTS = REPORTS_DIR / "evaluation_results"
-FIGURES_DIR = REPORTS_DIR / "figures"
-VIDEOS_DIR = REPORTS_DIR / "videos"
 
 
 # ENVIRONMENT --------------------------------------------------------------------------------------------- #
 
 
-# TRAINING ------------------------------------------------------------------------------------------------ #
-
-
-# EVALUATION ------------------------------------------------------------------------------------------------ #
+# TRAIN/EVAL ------------------------------------------------------------------------------------------------ #
 
 
 # LOGGING ------------------------------------------------------------------------------------------------- #

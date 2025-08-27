@@ -1,96 +1,33 @@
+from gc import callbacks
 from pathlib import Path
 import json
 
-from loguru import logger
 import numpy as np
 import pandas as pd
+from typing import Union
 from stable_baselines3 import PPO
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.callbacks import EvalCallback, ProgressBarCallback
 import typer
 
 from uav_nav_obstacle_avoidance_rl import config
-from uav_nav_obstacle_avoidance_rl.utils.env_helpers import make_flat_voyager
-# from uav_nav_obstacle_avoidance_rl.environment.metrics_wrapper import UAVMetricsWrapper
+from uav_nav_obstacle_avoidance_rl.config import logger
+from uav_nav_obstacle_avoidance_rl.utils import env_helpers, custom_callbacks
 
 app = typer.Typer()
 
 
-# Enhanced evaluation function that uses the metrics wrapper
-def evaluate_with_metrics(
-    model,
-    env_factory,
-    n_eval_episodes: int = 100,
-    deterministic: bool = True,
-    render: bool = False,
-    print_summary: bool = True
-) -> tuple[dict[str, float], list[dict[str, float]]]:
-    """
-    evaluate policy with custom UAV metrics collection.
-    
-    Args:
-        model: Trained RL model
-        env_factory: Function that creates the environment
-        n_eval_episodes: Number of episodes to evaluate
-        deterministic: Whether to use deterministic actions
-        render: Whether to render during evaluation
-        print_summary: Whether to print metrics summary
-    
-    Returns:
-        Tuple of (summary_metrics, episode_metrics)
-    """
-    # Create environment with metrics wrapper
-    env = env_factory()
-    env = UAVMetricsWrapper(env)
-    
-    episode_rewards = []
-    
-    for episode in range(n_eval_episodes):
-        obs, _ = env.reset()
-        episode_reward = 0
-        done = False
-        
-        while not done:
-            action, _ = model.predict(obs, deterministic=deterministic)
-            obs, reward, terminated, truncated, info = env.step(action)
-            episode_reward += reward
-            done = terminated or truncated
-            
-            if render:
-                env.render()
-        
-        episode_rewards.append(episode_reward)
-        
-        if (episode + 1) % 10 == 0:
-            print(f"Completed {episode + 1}/{n_eval_episodes} episodes")
-    
-    # Get metrics
-    summary_metrics = env.get_metrics_summary()
-    episode_metrics = env.get_episode_metrics()
-    
-    # Add reward statistics to summary
-    summary_metrics['avg_episode_reward'] = np.mean(episode_rewards)
-    summary_metrics['std_episode_reward'] = np.std(episode_rewards)
-    
-    if print_summary:
-        env.print_metrics_summary()
-        print(f"Average Episode Reward: {summary_metrics['avg_episode_reward']:.3f} ± {summary_metrics['std_episode_reward']:.3f}")
-    
-    env.close()
-    
-    return summary_metrics, episode_metrics
-
-
 @app.command()
-def evaluate_with_custom_metrics(
-    model_path: Path = config.MODELS_DIR / "model.zip",
-    n_episodes: int = 100,
+def evaluate_agent(
+    model_path: Union[Path, str],
+    n_eval_episodes: int = 10,
     deterministic: bool = True,
     render: bool = False,
     save_results: bool = True,
     results_dir: Path = config.REPORTS_DIR / "evaluation_results",
 ):
     """
-    evaluate model with custom UAV performance metrics.
-    
     Args:
         model_path: Path to the trained model
         n_episodes: Number of episodes to evaluate
@@ -99,37 +36,40 @@ def evaluate_with_custom_metrics(
         save_results: Whether to save results to files
         results_dir: Directory to save results
     """
-    logger.info(f"Evaluating agent with custom metrics for {n_episodes} episodes...")
+    logger.info(f"Evaluating agent with custom metrics for {n_eval_episodes} episodes...")
     
-    # Create results directory if saving
-    if save_results:
-        results_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Load trained model (then create env inside evaluate_with_metrics)
-    temp_env = make_flat_voyager(num_waypoints=1)
-    model = PPO.load(str(model_path), env=temp_env)
+    # load trained model
+    model = PPO.load(str(model_path))
+
+    # init vec_env
+    vec_env = make_vec_env(  # -> vec env
+        env_helpers.make_flat_voyager,
+        env_kwargs=dict(num_waypoints=1), 
+        monitor_kwargs=dict(info_keywords=("out_of_bounds", "collision", "env_complete", "num_targets_reached")),
+    )
+
+    # create callbacks
+    callbacks = [
+        # collect performance metrics
+        custom_callbacks.UAVMetricsCallback(
+            log_dir=results_dir.as_posix(),
+            save_freq=1000,
+            verbose=1,
+            ),
+        # log hyperparameters
+        custom_callbacks.HParamCallback(),
+    ]
+
+    # evaluate models
+    evaluate_policy(model, vec_env, n_eval_episodes, render=render, callback=callbacks)
+
     temp_env.close()
     
-    # Run evaluation with metrics
-    summary_metrics, episode_metrics = evaluate_with_metrics(
-        model=model,
-        env_factory=lambda: make_flat_voyager(num_waypoints=1),
-        n_eval_episodes=n_episodes,
-        deterministic=deterministic,
-        render=render,
-        print_summary=True
-    )
-    
-    # Log key metrics
-    logger.info("Key Performance Metrics:")
-    logger.info(f"  Success Rate: {summary_metrics['success_rate']:.3f}")
-    logger.info(f"  Average Path Length: {summary_metrics['avg_path_length']:.3f} m")
-    logger.info(f"  Average Velocity: {summary_metrics['avg_velocity']:.3f} m/s")
-    logger.info(f"  Path Efficiency Ratio: {summary_metrics['avg_path_efficiency_ratio']:.3f}")
-    logger.info(f"  Collision Rate: {summary_metrics['collision_rate']:.3f}")
     
     if save_results:
-        # Save summary metrics as JSON
+        results_dir.mkdir(parents=True, exist_ok=True)
+
+        # save summary metrics as JSON
         summary_file = results_dir / f"summary_metrics_{model_path.stem}.json"
         with open(summary_file, 'w') as f:
             # Convert numpy types to Python types for JSON serialization
@@ -147,11 +87,10 @@ def evaluate_with_custom_metrics(
         logger.info(f"  Episodes: {episodes_file}")
     
     logger.success("Evaluation complete.")
-    return summary_metrics, episode_metrics
-
+    return summary_metrics, episode_metric
 
 @app.command()
-def compare_models(
+def compare_agents(
     model_paths: list[Path],
     n_episodes: int = 50,
     deterministic: bool = True,
@@ -221,25 +160,18 @@ def compare_models(
 
 @app.command()
 def main(
-    model_name: str = 'model',
-    n_episodes: int = 100,
-    compare_mode: bool = False,
-):
-    """
-    main evaluation. choose between single model evaluation or comparison mode.
-    """
-    model_path = config.MODELS_DIR / model_name
-    
-    if compare_mode:
-        # Look for all model files in the models directory
-        model_files = list(config.MODELS_DIR.glob("*.zip"))
-        if len(model_files) > 1:
-            compare_models(model_files, n_episodes=n_episodes)
-        else:
-            logger.warning("less than 2 models found for comparison -> running single evaluation.")
-            evaluate_with_custom_metrics(model_path, n_episodes=n_episodes)
+    model_dir: Union[str, Path],
+    n_eval_episodes: int = 20,
+):  
+    model_dir = Path(model_dir)
+
+    # Look for all model files in directory
+    model_files = list(model_dir.glob("*.zip"))
+    if len(model_files) > 1:
+        compare_agents(model_files, n_episodes=n_eval_episodes)
     else:
-        evaluate_with_custom_metrics(model_path, n_episodes=n_episodes)
+        logger.warning("less than 2 models found for comparison -> running single evaluation.")
+        evaluate_agent(model_dir, n_eval_episodes=n_eval_episodes)
 
 
 if __name__ == "__main__":

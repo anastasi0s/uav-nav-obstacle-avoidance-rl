@@ -1,6 +1,6 @@
 from typing import Any
 
-from copier import Literal
+from typing import Any, Literal
 import gymnasium as gym
 import numpy as np
 from PyFlyt.gym_envs.quadx_envs.quadx_base_env import QuadXBaseEnv
@@ -36,6 +36,11 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             render_mode=render_mode,
             render_resolution=render_resolution,
         )
+
+        # define reward structure # TODO for now use the reward and termination logic from PyFlyt
+        self.sparse_reward = sparse_reward
+        self.num_targets = num_targets
+        self.flight_dome_size = flight_dome_size
 
         # define waypoint navigation – init waypoint handler
         self.waypoints = WaypointHandler(
@@ -81,8 +86,6 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             }
         )
 
-        # define reward structure # TODO for now use the reward and termination logic from PyFlyt
-        self.sparse_reward = sparse_reward
 
 
     def reset(

@@ -1,0 +1,681 @@
+2025-08-26 18:06:02,187 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating metrics distributions plot: '_io.BytesIO' object has no attribute 'ndim'
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 962, in _log_metrics_distributions
+    "eval_uav/metrics_distributions": wandb.Image(buf)
+                                      ^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/wandb/sdk/data_types/image.py", line 266, in __init__
+    self._initialize_from_data(data_or_path, mode, file_type, normalize)
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/wandb/sdk/data_types/image.py", line 423, in _initialize_from_data
+    if data.ndim > 2:  # type: ignore [union-attr]
+       ^^^^^^^^^
+AttributeError: '_io.BytesIO' object has no attribute 'ndim'
+2025-08-26 18:06:03,058 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating correlation matrix plot: '_io.BytesIO' object has no attribute 'ndim'
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 1017, in _log_correlation_matrix
+    "eval_uav/correlation_matrix": wandb.Image(buf)
+                                   ^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/wandb/sdk/data_types/image.py", line 266, in __init__
+    self._initialize_from_data(data_or_path, mode, file_type, normalize)
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/wandb/sdk/data_types/image.py", line 423, in _initialize_from_data
+    if data.ndim > 2:  # type: ignore [union-attr]
+       ^^^^^^^^^
+AttributeError: '_io.BytesIO' object has no attribute 'ndim'
+2025-08-26 18:06:21,416 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: analyse_metrics_1
+2025-08-26 18:16:03,182 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: analyse_metrics_1
+2025-08-26 18:16:07,625 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.14530498  0.9911964
+   0.          0.          0.          0.         -1.0575112  -0.7103983
+  -0.8864285 ]
+ [ 0.          0.          0.          0.         -0.13765521  0.9908405
+   0.          0.          0.          0.         -0.5868064  -2.267159
+   0.2671504 ]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[ -2.537254     3.649794     0.26428372   5.3731003 ]
+ [-15.025861    12.720946    -1.919486     7.5453606 ]]
+
+Stacked reward samples:
+[0.15659219 0.07865979]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-26 18:16:07,629 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-26 18:17:50,411 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: analyse_metrics_1
+2025-08-26 18:45:25,887 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: analyse_metrics_1
+2025-08-26 18:45:31,003 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.13673906  0.99132764
+   0.          0.          0.          0.         -2.4877527   0.5735587
+   0.48578727]
+ [ 0.          0.          0.          0.         -0.13868545  0.9914308
+   0.          0.          0.          0.          0.6926253  -0.4361814
+  -0.1940216 ]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[-19.207966    25.65982      0.95557135   7.3762546 ]
+ [ 20.18031     23.11023     -0.678045    -1.9203199 ]]
+
+Stacked reward samples:
+[0.07205012 0.3827449 ]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-26 18:45:31,006 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-26 18:46:25,940 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-26 18:46:25,942 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating trajectory plot: cannot access local variable 'positions' where it is not associated with a value
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 753, in _log_trajectory_plot
+    if len(positions) < 2:
+           ^^^^^^^^^
+UnboundLocalError: cannot access local variable 'positions' where it is not associated with a value
+2025-08-26 18:47:21,441 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: analyse_metrics_1
+2025-08-26 19:22:07,247 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: analyse_metrics_1
+2025-08-26 19:22:12,456 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.14781871  0.991109
+   0.          0.          0.          0.          1.6970166   0.54102117
+   2.7813358 ]
+ [ 0.          0.          0.          0.         -0.13321303  0.9910948
+   0.          0.          0.          0.         -1.8627231  -0.45911294
+   2.302076  ]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[-6.3928185  16.613184    1.1775135  -3.3099396 ]
+ [18.703945   15.117536   -2.2410617  -0.46206397]]
+
+Stacked reward samples:
+[0.02093986 0.03332272]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-26 19:22:12,459 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-26 19:23:13,362 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating trajectory plot: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 753, in _log_trajectory_plot
+    if not positions or len(positions) < 2:
+           ^^^^^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-08-26 19:23:13,525 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating correlation matrix plot: setting an array element with a sequence.
+TypeError: only length-1 arrays can be converted to Python scalars
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 1036, in _log_correlation_matrix
+    correlation_matrix = df.corr()
+                         ^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 11049, in corr
+    mat = data.to_numpy(dtype=float, na_value=np.nan, copy=False)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 1993, in to_numpy
+    result = self._mgr.as_array(dtype=dtype, copy=copy, na_value=na_value)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/internals/managers.py", line 1694, in as_array
+    arr = self._interleave(dtype=dtype, na_value=na_value)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/internals/managers.py", line 1753, in _interleave
+    result[rl.indexer] = arr
+    ~~~~~~^^^^^^^^^^^^
+ValueError: setting an array element with a sequence.
+2025-08-26 19:24:09,301 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating trajectory plot: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 753, in _log_trajectory_plot
+    if not positions or len(positions) < 2:
+           ^^^^^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-08-26 19:24:09,377 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating correlation matrix plot: setting an array element with a sequence.
+TypeError: only length-1 arrays can be converted to Python scalars
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 1036, in _log_correlation_matrix
+    correlation_matrix = df.corr()
+                         ^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 11049, in corr
+    mat = data.to_numpy(dtype=float, na_value=np.nan, copy=False)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 1993, in to_numpy
+    result = self._mgr.as_array(dtype=dtype, copy=copy, na_value=na_value)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/internals/managers.py", line 1694, in as_array
+    arr = self._interleave(dtype=dtype, na_value=na_value)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/internals/managers.py", line 1753, in _interleave
+    result[rl.indexer] = arr
+    ~~~~~~^^^^^^^^^^^^
+ValueError: setting an array element with a sequence.
+2025-08-26 19:24:19,434 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: analyse_metrics_1
+2025-08-26 19:30:35,175 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: analyse_metrics_1
+2025-08-26 19:30:39,170 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.14062886  0.99095047
+   0.          0.          0.          0.         -0.7979808   2.330948
+  -0.8909505 ]
+ [ 0.          0.          0.          0.         -0.14788093  0.99131954
+   0.          0.          0.          0.         -1.0938928  -0.08858015
+   1.1428106 ]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[-2.30224190e+01 -2.53783798e+01  1.12937745e-02  3.47167969e+00]
+ [-2.56413116e+01  1.88112450e+01  1.76480031e+00 -6.67539024e+00]]
+
+Stacked reward samples:
+[0.05243603 0.15183504]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-26 19:30:39,173 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-26 19:31:49,667 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-26 19:31:49,669 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating trajectory plot: cannot access local variable 'positions' where it is not associated with a value
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 753, in _log_trajectory_plot
+    if not positions or len(positions) < 2:
+           ^^^^^^^^^
+UnboundLocalError: cannot access local variable 'positions' where it is not associated with a value
+2025-08-26 19:31:49,843 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating correlation matrix plot: setting an array element with a sequence.
+TypeError: only length-1 arrays can be converted to Python scalars
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 1036, in _log_correlation_matrix
+    correlation_matrix = df.corr()
+                         ^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 11049, in corr
+    mat = data.to_numpy(dtype=float, na_value=np.nan, copy=False)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 1993, in to_numpy
+    result = self._mgr.as_array(dtype=dtype, copy=copy, na_value=na_value)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/internals/managers.py", line 1694, in as_array
+    arr = self._interleave(dtype=dtype, na_value=na_value)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/internals/managers.py", line 1753, in _interleave
+    result[rl.indexer] = arr
+    ~~~~~~^^^^^^^^^^^^
+ValueError: setting an array element with a sequence.
+2025-08-26 19:32:52,569 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating trajectory plot: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 753, in _log_trajectory_plot
+    if not positions or len(positions) < 2:
+           ^^^^^^^^^
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2025-08-26 19:32:52,646 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating correlation matrix plot: setting an array element with a sequence.
+TypeError: only length-1 arrays can be converted to Python scalars
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 1036, in _log_correlation_matrix
+    correlation_matrix = df.corr()
+                         ^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 11049, in corr
+    mat = data.to_numpy(dtype=float, na_value=np.nan, copy=False)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 1993, in to_numpy
+    result = self._mgr.as_array(dtype=dtype, copy=copy, na_value=na_value)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/internals/managers.py", line 1694, in as_array
+    arr = self._interleave(dtype=dtype, na_value=na_value)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/internals/managers.py", line 1753, in _interleave
+    result[rl.indexer] = arr
+    ~~~~~~^^^^^^^^^^^^
+ValueError: setting an array element with a sequence.
+2025-08-26 19:33:02,511 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: analyse_metrics_1
+2025-08-27 10:31:10,190 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: analyse_metrics_1
+2025-08-27 10:31:15,105 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.13839595  0.99126065
+   0.          0.          0.          0.          2.0333617   2.6975372
+   0.38121933]
+ [ 0.          0.          0.          0.         -0.14217311  0.9912007
+   0.          0.          0.          0.          2.6272018   2.258289
+  -0.67325217]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[ 5.635572  -1.8288804  2.2489927  6.6545477]
+ [19.886086   7.5869503  2.2707715 -6.8175583]]
+
+Stacked reward samples:
+[0.02620308 0.01842113]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-27 10:31:15,108 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-27 10:32:01,651 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 10:32:01,652 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating trajectory plot: cannot access local variable 'velocities' where it is not associated with a value
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 757, in _log_trajectory_plot
+    speed_magnitudes = np.linalg.norm(velocities, axis=1)
+                                      ^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'velocities' where it is not associated with a value
+2025-08-27 10:32:01,806 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating correlation matrix plot: "['positions_history', 'velocities_history', 'target_position_history'] not found in axis"
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 1011, in _log_correlation_matrix
+    df = df.drop(['positions_history', 'velocities_history', 'target_position_history'])
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 5581, in drop
+    return super().drop(
+           ^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/generic.py", line 4788, in drop
+    obj = obj._drop_axis(labels, axis, level=level, errors=errors)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/generic.py", line 4830, in _drop_axis
+    new_axis = axis.drop(labels, errors=errors)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/indexes/base.py", line 7070, in drop
+    raise KeyError(f"{labels[mask].tolist()} not found in axis")
+KeyError: "['positions_history', 'velocities_history', 'target_position_history'] not found in axis"
+2025-08-27 10:33:04,626 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating correlation matrix plot: "['positions_history', 'velocities_history', 'target_position_history'] not found in axis"
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 1011, in _log_correlation_matrix
+    df = df.drop(['positions_history', 'velocities_history', 'target_position_history'])
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 5581, in drop
+    return super().drop(
+           ^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/generic.py", line 4788, in drop
+    obj = obj._drop_axis(labels, axis, level=level, errors=errors)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/generic.py", line 4830, in _drop_axis
+    new_axis = axis.drop(labels, errors=errors)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/indexes/base.py", line 7070, in drop
+    raise KeyError(f"{labels[mask].tolist()} not found in axis")
+KeyError: "['positions_history', 'velocities_history', 'target_position_history'] not found in axis"
+2025-08-27 10:33:10,940 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: analyse_metrics_1
+2025-08-27 10:37:36,602 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: analyse_metrics_1
+2025-08-27 10:37:40,775 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.13879676  0.9910551
+   0.          0.          0.          0.         -1.8189492   0.5865816
+  -0.303358  ]
+ [ 0.          0.          0.          0.         -0.14307608  0.9911923
+   0.          0.          0.          0.          0.18422396 -0.11626957
+   0.11908104]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[  0.46439835  -5.8104343   -1.869827     6.5112877 ]
+ [  0.65979475 -19.961432     0.7902714   -0.8628329 ]]
+
+Stacked reward samples:
+[0.1065081 1.494595 ]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-27 10:37:40,778 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-27 10:38:34,003 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 10:38:34,105 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating correlation matrix plot: 'path_efficiency'
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/indexes/base.py", line 3805, in get_loc
+    return self._engine.get_loc(casted_key)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "index.pyx", line 167, in pandas._libs.index.IndexEngine.get_loc
+  File "index.pyx", line 196, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/hashtable_class_helper.pxi", line 7081, in pandas._libs.hashtable.PyObjectHashTable.get_item
+  File "pandas/_libs/hashtable_class_helper.pxi", line 7089, in pandas._libs.hashtable.PyObjectHashTable.get_item
+KeyError: 'path_efficiency'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 1014, in _log_correlation_matrix
+    df['path_efficiency'] = df['path_efficiency'].replace(0.0, np.nan)
+                            ~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 4102, in __getitem__
+    indexer = self.columns.get_loc(key)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/indexes/base.py", line 3812, in get_loc
+    raise KeyError(key) from err
+KeyError: 'path_efficiency'
+2025-08-27 10:39:37,905 - uav_nav_obstacle_avoidance_rl.config - ERROR - Error creating correlation matrix plot: 'path_efficiency'
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/indexes/base.py", line 3805, in get_loc
+    return self._engine.get_loc(casted_key)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "index.pyx", line 167, in pandas._libs.index.IndexEngine.get_loc
+  File "index.pyx", line 196, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/hashtable_class_helper.pxi", line 7081, in pandas._libs.hashtable.PyObjectHashTable.get_item
+  File "pandas/_libs/hashtable_class_helper.pxi", line 7089, in pandas._libs.hashtable.PyObjectHashTable.get_item
+KeyError: 'path_efficiency'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/uav_nav_obstacle_avoidance_rl/utils/custom_callbacks.py", line 1014, in _log_correlation_matrix
+    df['path_efficiency'] = df['path_efficiency'].replace(0.0, np.nan)
+                            ~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/frame.py", line 4102, in __getitem__
+    indexer = self.columns.get_loc(key)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/user/Documents/education/CAI/bachelor_thesis/uav-nav-obstacle-avoidance-rl/.venv/lib/python3.12/site-packages/pandas/core/indexes/base.py", line 3812, in get_loc
+    raise KeyError(key) from err
+KeyError: 'path_efficiency'
+2025-08-27 10:39:42,128 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: analyse_metrics_1
+2025-08-27 10:42:32,654 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: analyse_metrics_1
+2025-08-27 10:42:36,720 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.14252736  0.9911825
+   0.          0.          0.          0.          0.9399723  -0.5890829
+  -0.33750024]
+ [ 0.          0.          0.          0.         -0.14368033  0.9913171
+   0.          0.          0.          0.         -3.1626494   2.0902228
+   0.38430634]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[-20.666616    -9.798205    -2.2271624    0.84933364]
+ [ 18.029722    -4.1931033    1.2426846    4.8822646 ]]
+
+Stacked reward samples:
+[0.24469936 0.01282659]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-27 10:42:36,724 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-27 10:43:33,175 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 10:44:34,627 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: analyse_metrics_1
+2025-08-27 11:15:05,431 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: analyse_metrics_1
+2025-08-27 11:15:09,419 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.12916273  0.9910157
+   0.          0.          0.          0.         -0.17981349  0.30339456
+  -0.03418163]
+ [ 0.          0.          0.          0.         -0.14526987  0.99102217
+   0.          0.          0.          0.          0.07215126 -0.6606084
+   0.01717016]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[ -3.9650922  -11.89173      0.45631686  -5.5936284 ]
+ [ 23.22217     25.046633     1.9410179   -2.0293915 ]]
+
+Stacked reward samples:
+[1.0324129 0.5015829]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-27 11:15:09,422 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-27 11:15:43,093 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 11:17:26,383 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: analyse_metrics_1
+2025-08-27 11:17:30,522 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.14204016  0.99095976
+   0.          0.          0.          0.         -0.05572652  0.07016766
+   0.6185038 ]
+ [ 0.          0.          0.          0.         -0.12836681  0.9912895
+   0.          0.          0.          0.         -1.0059494  -0.5561156
+  -0.6441306 ]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[ -6.423014   15.605123    1.3262208   3.093671 ]
+ [-22.668655   21.969326   -1.9302787   1.9411341]]
+
+Stacked reward samples:
+[0.637715   0.20262763]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-27 11:17:30,525 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-27 11:18:19,796 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 11:19:11,881 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: analyse_metrics_1
+2025-08-27 11:41:02,413 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: analyse_metrics_1
+2025-08-27 11:41:06,347 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.13811474  0.9911008
+   0.          0.          0.          0.          0.13595974  1.0398055
+   1.3062412 ]
+ [ 0.          0.          0.          0.         -0.13063121  0.9915072
+   0.          0.          0.          0.         -0.7773717   0.4532469
+   0.6259558 ]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[-9.768596   23.747936   -0.97288394 -0.53634363]
+ [22.281965   16.121502    1.0670934  -7.7730045 ]]
+
+Stacked reward samples:
+[0.1382369  0.26400816]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-27 11:41:06,351 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-27 11:41:50,769 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 11:43:57,677 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 11:44:47,617 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: analyse_metrics_1
+2025-08-27 12:17:45,137 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: exp_0
+2025-08-27 12:17:48,917 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.13894382  0.99118257
+   0.          0.          0.          0.          2.0820427   1.1694326
+   2.067699  ]
+ [ 0.          0.          0.          0.         -0.14126784  0.9915349
+   0.          0.          0.          0.         -0.10048325  0.19944204
+   2.1385822 ]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[  3.7059443  -21.430794     0.99673295  -3.833599  ]
+ [ -7.450313    21.232447     2.5270295   -6.0474353 ]]
+
+Stacked reward samples:
+[0.02649589 0.08561712]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-27 12:17:48,920 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-27 12:21:17,504 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 12:24:51,437 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 12:25:00,095 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: exp_0
+2025-08-27 14:35:29,111 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: exp_0
+2025-08-27 14:35:33,468 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.1367582   0.9911805
+   0.          0.          0.          0.          0.46654457 -2.0302365
+   1.2280405 ]
+ [ 0.          0.          0.          0.         -0.13615926  0.9912751
+   0.          0.          0.          0.          1.9867339  -2.9939237
+  -0.8828511 ]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[-24.043053     7.2251515    1.7210864    7.7808084 ]
+ [  5.724615    -3.9491389   -0.62082034   2.126234  ]]
+
+Stacked reward samples:
+[0.10828541 0.00804355]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-27 14:35:33,471 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-27 14:37:44,282 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 14:38:47,822 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 14:39:54,574 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 14:41:03,854 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 14:42:12,062 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 14:42:20,794 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: exp_0
+2025-08-27 14:54:48,698 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: exp_0
+2025-08-27 15:00:08,002 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: exp_0
+2025-08-27 15:00:13,409 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.13866451  0.99093795
+   0.          0.          0.          0.          0.19489744 -0.53975034
+   1.7587138 ]
+ [ 0.          0.          0.          0.         -0.14412555  0.9913579
+   0.          0.          0.          0.          1.0839236   3.345004
+  -0.11379695]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[-21.376123   -7.646518   -2.363633   -1.9222107]
+ [  3.8091526   4.3690457  -0.5322955  -3.8894918]]
+
+Stacked reward samples:
+[0.11570225 0.01463351]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-27 15:00:13,412 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-27 15:08:16,330 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: exp_0
+2025-08-27 15:08:20,370 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.14018895  0.99117756
+   0.          0.          0.          0.          0.09457688 -0.15063305
+   1.8720047 ]
+ [ 0.          0.          0.          0.         -0.13976276  0.9911585
+   0.          0.          0.          0.         -0.90326315 -0.8756634
+   1.6031579 ]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[-20.969238    12.4699955    0.11473296  -3.5477328 ]
+ [  6.248741    11.063766    -0.98422736  -5.800804  ]]
+
+Stacked reward samples:
+[0.11213383 0.0958876 ]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-27 15:08:20,373 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-27 15:16:20,777 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: exp_0
+2025-08-27 15:16:24,791 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.13242352  0.9914364
+   0.          0.          0.          0.         -1.0366032  -1.151692
+   0.07871607]
+ [ 0.          0.          0.          0.         -0.14110577  0.99120194
+   0.          0.          0.          0.         -1.8340892   1.1837621
+   1.7670838 ]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[-16.674494   17.743895    2.3056138   4.4695725]
+ [ 22.098133   -2.8885856   2.0576646   1.8929864]]
+
+Stacked reward samples:
+[0.16167986 0.07439147]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'TimeLimit.truncated': False}]
+
+2025-08-27 15:16:24,794 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-08-27 15:18:48,146 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 15:19:58,755 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 15:21:07,194 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 15:22:18,377 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 15:23:29,514 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-08-27 15:23:38,393 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: exp_0

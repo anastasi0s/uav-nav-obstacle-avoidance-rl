@@ -1,6 +1,6 @@
 from typing import Any
 
-from copier import Literal
+from typing import Any, Literal
 import gymnasium as gym
 import numpy as np
 from PyFlyt.gym_envs.quadx_envs.quadx_base_env import QuadXBaseEnv
@@ -15,7 +15,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             num_targets: int = 1,  # NOTE starting with one waypoint for now
             use_yaw_targets: bool = False,  # toggles whether the agent must also align its yaw (heading) to a per‐waypoint target before that waypoint is considered “reached,” and whether yaw error is included in the observation.
             flight_mode: int = 5,  # uav constrol mode 5: (u, v, vr, vz) -> u: local velocity forward in m/s, v: lateral velocity in m/s, vr: yaw in rad/s, vz: vertical velocity in m/s
-            flight_dome_size: float = 30.0,  # (5 = default) maximum allowed flying distance from the start position of the uav in meters. (the radius of the “flight dome” within which the UAV must remain to avoid an out‑of‑bounds termination)
+            flight_dome_size: float = 5.0,  # (5.0 = default) maximum allowed flying distance from the start position of the uav in meters. (the radius of the “flight dome” within which the UAV must remain to avoid an out‑of‑bounds termination)
             goal_reach_distance: float = 0.2,  # distance within which the target is considered reached
             goal_reach_angle=0.1,  # not in use since use_yaw_targets is not in use
             max_duration_seconds: float = 80.0,  # max simulation time of the env
@@ -24,10 +24,10 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             render_mode: None | Literal["human", "rgb_array"] = None,
             render_resolution: tuple[int, int] = (480, 480),
             min_height: float = 0.1,  # min allowed hight, to avoid crashing on the floor. # NOTE (might take this out in the future to let the agent learn it itself to not crash on the floor)
-    ):
+    ):  
         # init the quadx base env
         super().__init__(
-            start_pos=np.array([[0.0, 0.0, 1.0]]),  # uav starting at pos [0, 0, 1]
+            start_pos=np.array([[0.0, 0.0, 1.0]]),  # uav starting at pos [0, 0, 1] # TODO implement random spawning
             flight_mode=flight_mode,
             flight_dome_size=flight_dome_size,
             max_duration_seconds=max_duration_seconds,
@@ -36,6 +36,11 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             render_mode=render_mode,
             render_resolution=render_resolution,
         )
+
+        # define reward structure # TODO for now use the reward and termination logic from PyFlyt
+        self.sparse_reward = sparse_reward
+        self.num_targets = num_targets
+        self.flight_dome_size = flight_dome_size
 
         # define waypoint navigation – init waypoint handler
         self.waypoints = WaypointHandler(
@@ -81,8 +86,6 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             }
         )
 
-        # define reward structure # TODO for now use the reward and termination logic from PyFlyt
-        self.sparse_reward = sparse_reward
 
 
     def reset(
@@ -112,7 +115,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         attitude[1] = ang_pos[2]        # (1,) - yaw, rotation position
         attitude[2:5] = lin_vel         # (3,) - body frame linear velocity vector (u, v, w)
         attitude[5] = lin_pos[2]        # (1,) - z position
-        attitude[6:10] = self.action    # (4,) - previous actions
+        attitude[6:10] = self.action    # (4,) - previous actions  # TODO check for other methods to capture temporal information of taken actions
 
         # # create empty array of type float32 -> compute the target deltas with the method from the waypointhandler -> fill array
         # target_deltas = np.empty((1,3), dtype=np.float32)
@@ -130,7 +133,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         """
         compute termination, truncation, and reward of the current timestep
 
-        use (reward, for now -> # TODO add custom reward function) and termination logic from pyflyt env
+        use reward and termination logic from pyflyt env (for now -> # TODO add custom reward function)
         """
 
         # call the base computation function

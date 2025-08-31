@@ -1,10 +1,10 @@
-from pathlib import Path
-from rich.console import Console
-from rich.traceback import install
-from rich.logging import RichHandler
 import logging
-from dotenv import load_dotenv
+from pathlib import Path
 
+from dotenv import load_dotenv
+from rich.console import Console
+from rich.logging import RichHandler
+from rich.traceback import install
 
 # load environment variables from .env file if it exists
 load_dotenv()
@@ -35,11 +35,11 @@ logging.basicConfig(
             tracebacks_show_locals=True,
         ),
         logging.FileHandler(
-            LOG_FILE, 
+            LOG_FILE,
             encoding="utf-8",
-            mode="a"  # append mode
-        )
-    ]
+            mode="a",  # append mode
+        ),
+    ],
 )
 
 # get logger instance

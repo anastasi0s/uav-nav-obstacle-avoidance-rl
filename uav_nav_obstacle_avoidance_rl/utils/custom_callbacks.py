@@ -57,16 +57,6 @@ class TrainMetricsCallback(BaseCallback):
         # current episode tracking
         self.current_episode_data = {}
 
-    def _reset_current_episode(self, env_idx: int):
-        """reset tracking for the next episode"""
-        self.current_episode_data[env_idx] = {
-            "positions": [],
-            "velocities": [],
-            "start_position": None,
-            "target_position": None,
-            "start_time": self.num_timesteps,
-        }
-
     def _on_training_start(self) -> None:
         """called at the start of training"""
         if self.verbose >= 1:
@@ -76,6 +66,16 @@ class TrainMetricsCallback(BaseCallback):
         n_envs = self.training_env.num_envs
         for i in range(n_envs):
             self._reset_current_episode(i)
+
+    def _reset_current_episode(self, env_idx: int):
+        """reset tracking for the next episode"""
+        self.current_episode_data[env_idx] = {
+            "positions": [],
+            "velocities": [],
+            "start_position": None,
+            "target_position": None,
+            "start_time": self.num_timesteps,
+        }
 
     def _on_step(self) -> bool:
         """called after each environment step"""
@@ -257,16 +257,6 @@ class CustomEvalCallback(EvalCallback):
 
         self.current_episode_data = {}
 
-    def _reset_current_episode(self):
-        """reset tracking for a new episode"""
-        self.current_episode_data = {
-            "positions": [],
-            "velocities": [],
-            "start_position": None,
-            "target_position": None,
-            "start_time": self.num_timesteps,
-        }
-
     def _on_step(self) -> bool:
         """override the parent _on_step to use our custom callback"""
         continue_training = True
@@ -435,6 +425,16 @@ class CustomEvalCallback(EvalCallback):
         except Exception as e:
             if self.verbose >= 1:
                 print(f"Error in _eval_callback: {e}")
+
+    def _reset_current_episode(self):
+        """reset tracking for a new episode"""
+        self.current_episode_data = {
+            "positions": [],
+            "velocities": [],
+            "start_position": None,
+            "target_position": None,
+            "start_time": self.num_timesteps,
+        }
 
     def _process_completed_eval_episode(self, info: dict):
         """

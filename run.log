@@ -1,0 +1,61 @@
+2025-09-15 11:56:49,176 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: exp_obs_0
+2025-09-15 13:00:14,387 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: exp_obs_0
+2025-09-15 13:00:19,284 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.13915642  0.9913371
+   0.          0.          0.          0.         -0.661098    0.74497527
+   0.43593934]
+ [ 0.          0.          0.          0.         -0.13064384  0.9910599
+   0.          0.          0.          0.          0.5602975  -1.2302943
+   0.62937814]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[ -8.577793   -3.748606    2.153504    3.2191033]
+ [  9.656043  -11.026836   -1.5877322  -5.4590616]]
+
+Stacked reward samples:
+[0.29881066 0.16789176]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'num_obstacles_spawned': 3, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'num_obstacles_spawned': 3, 'TimeLimit.truncated': False}]
+
+2025-09-15 13:00:19,288 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-09-15 13:15:35,592 - uav_nav_obstacle_avoidance_rl.config - INFO - Running Experiment: exp_obs_0
+2025-09-15 13:15:40,583 - uav_nav_obstacle_avoidance_rl.config - INFO - VecEnv:
+
+Observation space:
+Box(-inf, inf, (13,), float32)
+
+Stacked observations sample:
+[[ 0.          0.          0.          0.         -0.14073856  0.9913093
+   0.          0.          0.          0.         -2.1898773  -1.7160398
+  -0.1973839 ]
+ [ 0.          0.          0.          0.         -0.13287786  0.991494
+   0.          0.          0.          0.         -1.0009191   0.70718366
+   1.2738831 ]]
+
+Action space:
+Box([-26.   -26.    -2.62  -8.  ], [26.   26.    2.62  8.  ], (4,), float32)
+
+Stacked actions sample:
+[[-4.1994333  5.1982484 -2.5435011 -5.763526 ]
+ [17.857777  -0.8468589 -1.8077873  4.9465237]]
+
+Stacked reward samples:
+[0.04524032 0.18626177]
+
+Additional stacked monitored info:
+[{'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'num_obstacles_spawned': 2, 'TimeLimit.truncated': False}, {'out_of_bounds': False, 'collision': False, 'env_complete': False, 'num_targets_reached': 0, 'num_obstacles_spawned': 3, 'TimeLimit.truncated': False}]
+
+2025-09-15 13:15:40,587 - uav_nav_obstacle_avoidance_rl.config - INFO - Wrapper chain (outer <- inner): DummyVecEnv <- Monitor <- FlattenVectorVoyagerEnv <- VectorVoyagerEnv <- Aviary
+2025-09-15 13:16:31,746 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-09-15 13:17:08,677 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-09-15 13:17:46,851 - uav_nav_obstacle_avoidance_rl.config - WARNING - Insufficient data for success analysis (need both success and failure episodes)
+2025-09-15 13:17:51,066 - uav_nav_obstacle_avoidance_rl.config - INFO - Completed experiment: exp_obs_0

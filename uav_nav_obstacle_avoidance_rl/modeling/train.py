@@ -16,16 +16,25 @@ app = typer.Typer()
 @app.command()
 def run_exp(
     exp_name: str = f"run_{int(time.time())}",
-    timesteps: int = 300_000,
-    eval_freq: int = 50_000,
+    timesteps: int = 15_000,
+    eval_freq: int = 5_000,
     n_envs: int = 2,
     exp_analysis: bool = True,
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     wandb_tags: list[str] | None = None,
+    
     # Environment hyperparameters
     num_waypoints: int = 1,
     flight_dome_size: float = 5.0,
     max_duration_seconds: float = 80.0,
+    enable_obstacles: bool = True,
+    visual_obstacles: bool = True,
+    num_obstacles: tuple[int, int] = (0, 3),
+    obstacle_types: list[str] = ["sphere", "box", "cylinder"],
+    obstacle_size_range: tuple[float, float] = (0.1, 0.8),
+    obstacle_min_distance_from_start: float = 1.0,
+    obstacle_hight_range: tuple[float, float] = (0.1, 5.0),
+    
     # PPO hyperparameters
     learning_rate: float = 3e-4,
     batch_size: int = 64,
@@ -77,39 +86,62 @@ def run_exp(
         save_code=True,  # save code for reproducibility
     )
 
-    # environment configuration
-    env_kwargs = {
+    # train environment configuration
+    env_kwargs_train = {
         "num_waypoints": num_waypoints,
         "flight_dome_size": flight_dome_size,
         "max_duration_seconds": max_duration_seconds,
+        "enable_obstacles": enable_obstacles,
+        "visual_obstacles": False,
+        "num_obstacles": num_obstacles,
+        "obstacle_types": obstacle_types,
+        "obstacle_size_range": obstacle_size_range,
+        "obstacle_min_distance_from_start": obstacle_min_distance_from_start,
+        "obstacle_hight_range": obstacle_hight_range,
     }
 
     # create training environment
     vec_env = make_vec_env(
         env_helpers.make_flat_voyager,
         n_envs=n_envs,
-        env_kwargs=env_kwargs,
+        env_kwargs=env_kwargs_train,
         monitor_kwargs=dict(
             info_keywords=(
                 "out_of_bounds",
                 "collision",
                 "env_complete",
                 "num_targets_reached",
+                "num_obstacles_spawned",
             )
         ),
     )
 
-    # create separete evaluation environment
+    # separate eval environment configuration
+    env_kwargs_val = {
+        "num_waypoints": num_waypoints,
+        "flight_dome_size": flight_dome_size,
+        "max_duration_seconds": max_duration_seconds,
+        "enable_obstacles": enable_obstacles,
+        "visual_obstacles": visual_obstacles,
+        "num_obstacles": num_obstacles,
+        "obstacle_types": obstacle_types,
+        "obstacle_size_range": obstacle_size_range,
+        "obstacle_min_distance_from_start":obstacle_min_distance_from_start,
+        "obstacle_hight_range": obstacle_hight_range,
+    }
+
+    # separete evaluation environment
     vec_env_eval = make_vec_env(
         env_helpers.make_flat_voyager,
         n_envs=1,  # single env for evaluation - simple and clean
-        env_kwargs=env_kwargs,
+        env_kwargs=env_kwargs_val,
         monitor_kwargs=dict(
             info_keywords=(
                 "out_of_bounds",
                 "collision",
                 "env_complete",
                 "num_targets_reached",
+                "num_obstacles_spawned",
             )
         ),
     )

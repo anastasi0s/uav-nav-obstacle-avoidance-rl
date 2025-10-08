@@ -1,8 +1,7 @@
 .venv
 models/
 references/
-reports/
-wandb/
+reports/wandb/
 drafts/
 run.log
 .ipynb_checkpoints/

@@ -43,7 +43,7 @@ def make_voyager_for_recording(
     # create vectorized env and use render_mode="rgb_array" (env.rander() returns image array instead of poping up a window)
     # add third person camera wrapper
     env = make_vec_env(
-        lambda **env_kwargs: ThirdPersonCamWrapper(make_flat_voyager(**env_kwargs)),
+        env_id=lambda **env_kwargs: ThirdPersonCamWrapper(make_flat_voyager(**env_kwargs)),
         n_envs=1,
         env_kwargs=env_kwargs,
     )

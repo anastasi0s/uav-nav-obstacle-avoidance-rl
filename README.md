@@ -4,9 +4,13 @@ A Reinforcement Learning-based UAV navigation system for obstacle avoidance in d
 
 ### Examples
 Some interim examples:
-[UAV trajectory examples](https://anastasi0s.github.io/uav-nav-obstacle-avoidance-rl/blob/feature/generate-obstacles-inside-env/docs/examples/UAV_trajectory_0_250000_879b8508a17ebdb4c694.html)
+<video src="reports/examples/ep0-step-0-to-step-1000.mp4" width="480" controls></video>
 
-[UAV video recordings](docs/examples)
+UAV hovering around target to collect rewards!:
+<video src="reports/examples/ep3-step-0-to-step-1000.mp4" width="480" controls></video>
+
+<img src="reports/examples/UAV_trajectory_0_250000.png" alt="UAV Trajectory Plot 1" width="480">
+<img src="reports/examples/UAV_trajectory_0_300000.png" alt="UAV Trajectory Plot 2" width="480">
 
 ## Project Organization
 

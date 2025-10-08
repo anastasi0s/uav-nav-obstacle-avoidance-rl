@@ -11,20 +11,21 @@ from uav_nav_obstacle_avoidance_rl.vendor.pyflyt import FlattenVectorVoyagerEnv
 
 
 # create flat pyflyt environment
-def make_flat_voyager(num_waypoints: int = 1, **env_kwargs):
+def make_flat_voyager(**env_kwargs):
     """
-    Create a flattened Vector Voyager environment.
+    Create a flattened Vector Voyager environment
 
     Args:
-        num_waypoints: Number of waypoints for the environment
-        with_metrics: Whether to include metrics collection wrapper
-        **env_kwargs: Additional arguments for the environment
+        **env_kwargs: Additional arguments for the environment (including num_waypoints)
     """
-    # Create base environment
-    env = VectorVoyagerEnv(num_targets=num_waypoints, **env_kwargs)
+    # extract num_waypoints from env_kwargs
+    num_targets = env_kwargs.get("num_targets", 1)
 
-    # Add flattening wrapper
-    env = FlattenVectorVoyagerEnv(env, context_length=num_waypoints)
+    # create base environment
+    env = VectorVoyagerEnv(**env_kwargs)
+
+    # add flattening wrapper
+    env = FlattenVectorVoyagerEnv(env, context_length=num_targets)
 
     return env
 
@@ -34,8 +35,6 @@ def make_voyager_for_recording(
     video_folder,
     video_length,
     video_name,
-    num_waypoints: int = 1,
-    with_metrics: bool = False,
     **env_kwargs,
 ):
     """
@@ -44,20 +43,16 @@ def make_voyager_for_recording(
     # create vectorized env and use render_mode="rgb_array" (env.rander() returns image array instead of poping up a window)
     # add third person camera wrapper
     env = make_vec_env(
-        lambda **kw: ThirdPersonCamWrapper(make_flat_voyager(**kw)),
+        lambda **env_kwargs: ThirdPersonCamWrapper(make_flat_voyager(**env_kwargs)),
         n_envs=1,
-        env_kwargs=dict(
-            num_waypoints=num_waypoints,
-            with_metrics=with_metrics,
-            render_mode="rgb_array",
-        ),
+        env_kwargs=env_kwargs,
     )
 
     # wrap with the VecVideoRecorder
     env = VecVideoRecorder(
         env,
         video_folder=video_folder,
-        record_video_trigger=lambda step: step == 0,
+        record_video_trigger=lambda step: step % video_length == 0,
         video_length=video_length,
         name_prefix=video_name,
     )

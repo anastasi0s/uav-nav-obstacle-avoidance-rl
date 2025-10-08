@@ -24,7 +24,7 @@ def run_exp(
     wandb_tags: list[str] | None = None,
     
     # Environment hyperparameters
-    num_waypoints: int = 1,
+    num_targets: int = 1,
     flight_dome_size: float = 5.0,
     max_duration_seconds: float = 80.0,
     enable_obstacles: bool = True,
@@ -60,9 +60,16 @@ def run_exp(
         "eval_freq": eval_freq,
         "n_envs": n_envs,
         # Environment params
-        "num_waypoints": num_waypoints,
+        "num_targets": num_targets,
         "flight_dome_size": flight_dome_size,
         "max_duration_seconds": max_duration_seconds,
+        "enable_obstacles": enable_obstacles,
+        "visual_obstacles": visual_obstacles,
+        "num_obstacles": num_obstacles,
+        "obstacle_types": obstacle_types,
+        "obstacle_size_range": obstacle_size_range,
+        "obstacle_min_distance_from_start": obstacle_min_distance_from_start,
+        "obstacle_hight_range": obstacle_hight_range,
         # PPO hyperparameters
         "learning_rate": learning_rate,
         "batch_size": batch_size,
@@ -88,7 +95,7 @@ def run_exp(
 
     # train environment configuration
     env_kwargs_train = {
-        "num_waypoints": num_waypoints,
+        "num_targets": num_targets,
         "flight_dome_size": flight_dome_size,
         "max_duration_seconds": max_duration_seconds,
         "enable_obstacles": enable_obstacles,
@@ -118,7 +125,7 @@ def run_exp(
 
     # separate eval environment configuration
     env_kwargs_val = {
-        "num_waypoints": num_waypoints,
+        "num_targets": num_targets,
         "flight_dome_size": flight_dome_size,
         "max_duration_seconds": max_duration_seconds,
         "enable_obstacles": enable_obstacles,

@@ -287,9 +287,11 @@ class CustomEvalCallback(EvalCallback):
                 "mean_velocities": [],
                 "path_lengths": [],
                 "path_efficiencies": [],
+                "num_spawned_obs": [],
                 "positions_history": [],  # for trajectory plotting (nested array)
                 "velocities_history": [],  # for trajectory plotting (nested array)
                 "target_position_history": [],  # for trajectory plotting (nested array)
+                "obstacles_history": [],  # for trajectory plotting
             }
             self._is_success_buffer = []
 
@@ -398,22 +400,58 @@ class CustomEvalCallback(EvalCallback):
                 if hasattr(underlying_env, "waypoints") and hasattr(
                     underlying_env, "compute_attitude"
                 ):  # if base env has been found then stop peeling
+                    # underlying_env = underlying_env.env
                     break
                 underlying_env = underlying_env.env
 
-            state = underlying_env.env.state(0)
+            state = underlying_env.env.state(0)  # capture state from Aviary env
             lin_pos = state[3]  # [x, y, z] position
             lin_vel = state[2]  # [u, v, w] velocity
 
             self.current_episode_data["positions"].append(lin_pos.copy())
             self.current_episode_data["velocities"].append(lin_vel.copy())
 
-            # set start position if first step
+            # at episode start ->
             if self.current_episode_data["start_position"] is None:
+                # -> capture start position
                 self.current_episode_data["start_position"] = lin_pos.copy()
 
-            # get target position (only set once at episode start)
+                # -> capture obstacle info
+                if hasattr(underlying_env, 'obstacle_ids') and underlying_env.obstacle_ids:
+                    obstacles_data = []
+                    for obs_id in underlying_env.obstacle_ids:
+                        try:
+                            # capture obstacle position and orientation
+                            pos, orn = underlying_env.env.getBasePositionAndOrientation(obs_id)
+                            
+                            # capture collision shape data
+                            collision_shape_info = underlying_env.env.getCollisionShapeData(obs_id, -1)
+
+                            if collision_shape_info:
+                                shape_info = collision_shape_info[0]  # first (and usually only) collision shape
+                                obstacles_data.append({
+                                    'id': obs_id,
+                                    'position': np.array(pos),
+                                    'orientation': np.array(orn),
+                                    'shape_type': shape_info[2],  # geometry type
+                                    'dimensions': np.array(shape_info[3]),  # dimensions
+                                    'local_frame_pos': np.array(shape_info[5]),  # local position
+                                    'local_frame_orn': np.array(shape_info[6]),  # local orientation
+                                })
+                        except Exception as obs_error:
+                            # skip obstacle if there are no data
+                            if self.verbose >= 2:
+                                logger.debug(f"Could not capture obstacle {obs_id}: {obs_error}")
+                            continue
+
+                    self.current_episode_data["obstacles"] = obstacles_data
+                else:
+                    # No obstacles in this episode
+                    self.current_episode_data["obstacles"] = []
+
+            # at episode start ->
             if self.current_episode_data["target_position"] is None:
+                # -> capture target position
                 self.current_episode_data["target_position"] = (
                     underlying_env.waypoints.targets[0].copy()
                 )  # TODO adjust to multiple waypoints
@@ -434,6 +472,7 @@ class CustomEvalCallback(EvalCallback):
             "start_position": None,
             "target_position": None,
             "start_time": self.num_timesteps,
+            "obstacles": []
         }
 
     def _process_completed_eval_episode(self, info: dict):
@@ -443,7 +482,8 @@ class CustomEvalCallback(EvalCallback):
         - 'episode' is dic and contains logged info from the Monitor wrapper: r, l, t by default, plus any additional logged information (in this case)
         """
         try:
-            # extract episode results from Monitor wrapper
+            ## GET METRICS
+            # capture episode results from Monitor wrapper
             collision = info["collision"]
             out_of_bounds = info["out_of_bounds"]
             env_complete = info["env_complete"]
@@ -453,7 +493,7 @@ class CustomEvalCallback(EvalCallback):
 
             # check for success = all targets reached, without collisions
             success = env_complete and not collision and not out_of_bounds
-
+            
             # calculate custom metrics
             path_length = self._calculate_path_length(
                 self.current_episode_data["positions"]
@@ -471,7 +511,11 @@ class CustomEvalCallback(EvalCallback):
             else:
                 # unsuccessful episodes (for consistent array length in self.episode_history)
                 path_efficiency = 0.0
+            
+            # capture number of spawned obstacle in episode
+            num_spawned_obs = len(self.current_episode_data["obstacles"])
 
+            ## STORE METRICS
             # store in evaluation-cycle-level episode history
             self.current_eval_cycle_data["success"].append(int(success))
             self.current_eval_cycle_data["collision"].append(int(collision))
@@ -484,6 +528,7 @@ class CustomEvalCallback(EvalCallback):
             self.current_eval_cycle_data["mean_velocities"].append(mean_velocity)
             self.current_eval_cycle_data["path_lengths"].append(path_length)
             self.current_eval_cycle_data["path_efficiencies"].append(path_efficiency)
+            self.current_eval_cycle_data["num_spawned_obs"].append(num_spawned_obs)
 
             self.current_eval_cycle_data["positions_history"].append(
                 np.array(self.current_episode_data["positions"]).copy()
@@ -495,7 +540,11 @@ class CustomEvalCallback(EvalCallback):
                 np.array(self.current_episode_data["target_position"]).copy()
             )  # NOTE adjust for mulitple waypoints
 
-            # Reset for next episode
+            self.current_eval_cycle_data["obstacles_history"].append(
+                self.current_episode_data["obstacles"].copy()  # list of obstacles (dicts)
+            )
+
+            # RESET for next episode
             self._reset_current_episode()
 
         except Exception as e:
@@ -532,7 +581,9 @@ class CustomEvalCallback(EvalCallback):
         """log detailed evaluation metrics to W&B"""
         # calculate aggregate metrics
         eval_metrics = {
-            "eval_uav/success_rate": np.mean(self.current_eval_cycle_data["success"]),
+            "eval_uav/success_rate": np.mean(
+                self.current_eval_cycle_data["success"]
+            ),
             "eval_uav/collision_rate": np.mean(
                 self.current_eval_cycle_data["collision"]
             ),
@@ -1047,6 +1098,89 @@ class CustomEvalCallback(EvalCallback):
                     )
                 )
 
+                # plot obstacles using PyBullet collision shape data
+                obstacles = self.current_eval_cycle_data["obstacles_history"][ep_idx]
+                if obstacles:
+                    for i, obs in enumerate(obstacles):
+                        pos = obs['position']
+                        shape_type = obs['shape_type']
+                        dims = obs['dimensions']
+                        
+                        # GEOM_SPHERE = 2
+                        if shape_type == 2:
+                            radius = dims[0]
+                            # Create sphere mesh
+                            u = np.linspace(0, 2 * np.pi, 20)
+                            v = np.linspace(0, np.pi, 20)
+                            x = radius * np.outer(np.cos(u), np.sin(v)) + pos[0]
+                            y = radius * np.outer(np.sin(u), np.sin(v)) + pos[1]
+                            z = radius * np.outer(np.ones(np.size(u)), np.cos(v)) + pos[2]
+                            
+                            fig.add_trace(go.Surface(
+                                x=x, y=y, z=z,
+                                opacity=0.5,
+                                colorscale=[[0, 'red'], [1, 'red']],
+                                showscale=False,
+                                name=f'Obstacle {i+1}',
+                                legendgroup=f'obs{i}',
+                                hovertemplate=f'<b>Obstacle {i+1}</b><br>Type: Sphere<br>Radius: {radius:.2f}m<extra></extra>',
+                            ))
+                        
+                        # GEOM_BOX = 3
+                        elif shape_type == 3:
+                            # dims contains half-extents [x, y, z]
+                            half_extents = dims[:3]
+                            
+                            # Create 8 vertices of the box
+                            vertices = np.array([
+                                [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+                                [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]
+                            ]) * half_extents + pos
+                            
+                            # Create a mesh (faces) for the box for better visualization
+                            # Define 6 faces (each face has 4 vertices forming 2 triangles)
+                            i_faces = [0, 0, 2, 2, 4, 4, 1, 1, 3, 3, 5, 5]  # vertex indices for triangles
+                            j_faces = [1, 3, 3, 1, 5, 7, 5, 0, 7, 2, 6, 4]
+                            k_faces = [2, 1, 6, 3, 6, 5, 4, 5, 4, 6, 2, 7]
+                            
+                            fig.add_trace(go.Mesh3d(
+                                x=vertices[:, 0],
+                                y=vertices[:, 1],
+                                z=vertices[:, 2],
+                                i=i_faces,
+                                j=j_faces,
+                                k=k_faces,
+                                opacity=0.5,
+                                color='red',
+                                name=f'Obstacle {i+1}',
+                                legendgroup=f'obs{i}',
+                                hovertemplate=f'<b>Obstacle {i+1}</b><br>Type: Box<br>Dims: {half_extents[0]:.2f}x{half_extents[1]:.2f}x{half_extents[2]:.2f}m<extra></extra>',
+                            ))
+                        
+                        # GEOM_CYLINDER = 4 (or GEOM_CAPSULE = 7)
+                        elif shape_type == 4:
+                            # For cylinder: dims[0] = height, dims[1] = radius
+                            height = dims[0]
+                            radius = dims[1]
+                            
+                            # Create cylinder mesh
+                            theta = np.linspace(0, 2*np.pi, 30)
+                            z_cyl = np.linspace(-height/2, height/2, 20)
+                            theta_grid, z_grid = np.meshgrid(theta, z_cyl)
+                            x = radius * np.cos(theta_grid) + pos[0]
+                            y = radius * np.sin(theta_grid) + pos[1]
+                            z = z_grid + pos[2]
+                            
+                            fig.add_trace(go.Surface(
+                                x=x, y=y, z=z,
+                                opacity=0.5,
+                                colorscale=[[0, 'red'], [1, 'red']],
+                                showscale=False,
+                                name=f'Obstacle {i+1}',
+                                legendgroup=f'obs{i}',
+                                hovertemplate=f'<b>Obstacle {i+1}</b><br>Type: Cylinder<br>Radius: {radius:.2f}m<br>Height: {height:.2f}m<extra></extra>',
+                            ))
+
                 # update layout
                 fig.update_layout(
                     title=f"UAV Trajectory (Reward: {reward:.2f}, Success: {success}, Targets reached: {targets_reached})",
@@ -1090,7 +1224,7 @@ class CustomEvalCallback(EvalCallback):
 
             # remove useless columns
             df = df.drop(
-                ["positions_history", "velocities_history", "target_position_history"],
+                ["positions_history", "velocities_history", "target_position_history", "obstacles_history"],
                 axis=1,
             )
 

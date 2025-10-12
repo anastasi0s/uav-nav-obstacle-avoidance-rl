@@ -172,7 +172,9 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             # create collision and visual shapes
             collision_id = self._create_collision_id(obstacle_type, size)
             if self.visual_obstacles:
-                visual_id = self._create_visual_id(obstacle_type, size, color)
+                visual_id = self._create_visual_id(
+                    obstacle_type, size, color
+                )  # visible obstacles
             else:
                 visual_id = -1  # invisible objects
 

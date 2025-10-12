@@ -2,8 +2,8 @@
 models/
 references/
 reports/
-wandb/
-notebooks/
+# wandb/
+drafts/
 run.log
 .ipynb_checkpoints/
 
@@ -20,3 +20,4 @@ __pycache__/
 
 # Environment variables
 .env
+run.log

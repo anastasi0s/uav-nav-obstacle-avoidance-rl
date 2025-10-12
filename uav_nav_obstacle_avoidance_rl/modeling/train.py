@@ -4,9 +4,7 @@ import typer
 import wandb
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import VecVideoRecorder
 from wandb.integration.sb3 import WandbCallback
-
 
 from uav_nav_obstacle_avoidance_rl import config
 from uav_nav_obstacle_avoidance_rl.utils import custom_callbacks, env_helpers
@@ -18,17 +16,26 @@ app = typer.Typer()
 @app.command()
 def run_exp(
     exp_name: str = f"run_{int(time.time())}",
-    timesteps: int = 300_000,
-    eval_freq: int = 50_000,
+    timesteps: int = 15_000,
+    eval_freq: int = 5_000,
     n_envs: int = 2,
     exp_analysis: bool = True,
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     wandb_tags: list[str] | None = None,
+    
     # Environment hyperparameters
-    num_waypoints: int = 1,
+    num_targets: int = 1,
     flight_dome_size: float = 5.0,
     max_duration_seconds: float = 80.0,
-    # PPO hyperparameters  
+    enable_obstacles: bool = True,
+    visual_obstacles: bool = True,
+    num_obstacles: tuple[int, int] = (0, 3),
+    obstacle_types: list[str] = ["sphere", "box", "cylinder"],
+    obstacle_size_range: tuple[float, float] = (0.1, 0.8),
+    obstacle_min_distance_from_start: float = 1.0,
+    obstacle_hight_range: tuple[float, float] = (0.1, 5.0),
+    
+    # PPO hyperparameters
     learning_rate: float = 3e-4,
     batch_size: int = 64,
     n_steps: int = 2048,
@@ -53,9 +60,16 @@ def run_exp(
         "eval_freq": eval_freq,
         "n_envs": n_envs,
         # Environment params
-        "num_waypoints": num_waypoints,
+        "num_targets": num_targets,
         "flight_dome_size": flight_dome_size,
         "max_duration_seconds": max_duration_seconds,
+        "enable_obstacles": enable_obstacles,
+        "visual_obstacles": visual_obstacles,
+        "num_obstacles": num_obstacles,
+        "obstacle_types": obstacle_types,
+        "obstacle_size_range": obstacle_size_range,
+        "obstacle_min_distance_from_start": obstacle_min_distance_from_start,
+        "obstacle_hight_range": obstacle_hight_range,
         # PPO hyperparameters
         "learning_rate": learning_rate,
         "batch_size": batch_size,
@@ -66,7 +80,7 @@ def run_exp(
         "ent_coef": ent_coef,
         "vf_coef": vf_coef,
     }
-    
+
     # init W&B
     wandb_run = wandb.init(
         project=wandb_project,
@@ -75,31 +89,68 @@ def run_exp(
         tags=wandb_tags or ["training_and_eval", f"dome_{flight_dome_size}m"],
         dir=config.REPORTS_DIR.as_posix(),
         sync_tensorboard=False,  # auto-upload tensorboard metrics
-        monitor_gym=True,       # auto-upload videos
-        save_code=True,         # save code for reproducibility
+        monitor_gym=True,  # auto-upload videos
+        save_code=True,  # save code for reproducibility
     )
 
-    # environment configuration
-    env_kwargs = {
-        "num_waypoints": num_waypoints,
+    # train environment configuration
+    env_kwargs_train = {
+        "num_targets": num_targets,
         "flight_dome_size": flight_dome_size,
         "max_duration_seconds": max_duration_seconds,
+        "enable_obstacles": enable_obstacles,
+        "visual_obstacles": False,
+        "num_obstacles": num_obstacles,
+        "obstacle_types": obstacle_types,
+        "obstacle_size_range": obstacle_size_range,
+        "obstacle_min_distance_from_start": obstacle_min_distance_from_start,
+        "obstacle_hight_range": obstacle_hight_range,
     }
 
     # create training environment
     vec_env = make_vec_env(
-        env_helpers.make_flat_voyager, 
-        n_envs=n_envs, 
-        env_kwargs=env_kwargs,
-        monitor_kwargs=dict(info_keywords=("out_of_bounds", "collision", "env_complete", "num_targets_reached")),
+        env_helpers.make_flat_voyager,
+        n_envs=n_envs,
+        env_kwargs=env_kwargs_train,
+        monitor_kwargs=dict(
+            info_keywords=(
+                "out_of_bounds",
+                "collision",
+                "env_complete",
+                "num_targets_reached",
+                "num_obstacles_spawned",
+            )
+        ),
     )
 
-    # create separete evaluation environment
+    # separate eval environment configuration
+    env_kwargs_val = {
+        "num_targets": num_targets,
+        "flight_dome_size": flight_dome_size,
+        "max_duration_seconds": max_duration_seconds,
+        "enable_obstacles": enable_obstacles,
+        "visual_obstacles": visual_obstacles,
+        "num_obstacles": num_obstacles,
+        "obstacle_types": obstacle_types,
+        "obstacle_size_range": obstacle_size_range,
+        "obstacle_min_distance_from_start":obstacle_min_distance_from_start,
+        "obstacle_hight_range": obstacle_hight_range,
+    }
+
+    # separete evaluation environment
     vec_env_eval = make_vec_env(
-        env_helpers.make_flat_voyager, 
+        env_helpers.make_flat_voyager,
         n_envs=1,  # single env for evaluation - simple and clean
-        env_kwargs=env_kwargs,
-        monitor_kwargs=dict(info_keywords=("out_of_bounds", "collision", "env_complete", "num_targets_reached")),
+        env_kwargs=env_kwargs_val,
+        monitor_kwargs=dict(
+            info_keywords=(
+                "out_of_bounds",
+                "collision",
+                "env_complete",
+                "num_targets_reached",
+                "num_obstacles_spawned",
+            )
+        ),
     )
 
     # analyze environment
@@ -107,14 +158,14 @@ def run_exp(
 
     # Setup callbacks
     callbacks = []
-    
+
     # add W&B callback
     wandb_callback = WandbCallback(
         # gradient_save_freq=1000,
         verbose=2,
     )
     callbacks.append(wandb_callback)
-    
+
     # add custom train metrics callback
     train_callback = custom_callbacks.TrainMetricsCallback(
         run_path=wandb_run.dir,
@@ -125,7 +176,7 @@ def run_exp(
 
     # add custom evaluation metrics callback
     eval_callback = custom_callbacks.CustomEvalCallback(
-        vec_env_eval, 
+        vec_env_eval,
         best_model_save_path=f"{wandb_run.dir}/models",
         log_path=wandb_run.dir,
         eval_freq=eval_freq,
@@ -138,7 +189,7 @@ def run_exp(
 
     # create model
     model = PPO(
-        "MlpPolicy", 
+        "MlpPolicy",
         vec_env,
         learning_rate=learning_rate,
         batch_size=batch_size,
@@ -148,13 +199,13 @@ def run_exp(
         clip_range=clip_range,
         ent_coef=ent_coef,
         vf_coef=vf_coef,
-        verbose=0, 
+        verbose=0,
         tensorboard_log=f"{wandb_run.dir}/tensorboard",
     )
-    
+
     # train model
     model.learn(
-        total_timesteps=timesteps, 
+        total_timesteps=timesteps,
         callback=callbacks,
         progress_bar=True,
     )
@@ -164,6 +215,7 @@ def run_exp(
 
     logger.info(f"Completed experiment: {exp_name}")
 
+
 @app.command()
 def sweep():
     """
@@ -171,33 +223,20 @@ def sweep():
     """
     # Define sweep configuration
     sweep_config = {
-        'method': 'bayes',
-        'metric': {
-            'name': 'rollout/ep_rew_mean',
-            'goal': 'maximize'
+        "method": "bayes",
+        "metric": {"name": "rollout/ep_rew_mean", "goal": "maximize"},
+        "parameters": {
+            "learning_rate": {"values": [1e-4, 3e-4, 1e-3]},
+            "batch_size": {"values": [32, 64, 128]},
+            "gamma": {"values": [0.95, 0.99, 0.995]},
+            "flight_dome_size": {"values": [3.0, 5.0, 10.0]},
+            "n_steps": {"values": [1024, 2048, 4096]},
         },
-        'parameters': {
-            'learning_rate': {
-                'values': [1e-4, 3e-4, 1e-3]
-            },
-            'batch_size': {
-                'values': [32, 64, 128]
-            },
-            'gamma': {
-                'values': [0.95, 0.99, 0.995]
-            },
-            'flight_dome_size': {
-                'values': [3.0, 5.0, 10.0]
-            },
-            'n_steps': {
-                'values': [1024, 2048, 4096]
-            }
-        }
     }
-    
+
     # Initialize sweep
     sweep_id = wandb.sweep(sweep_config, project="uav-nav-rl-sweep")
-    
+
     def train_sweep():
         with wandb.init() as run:
             config = run.config
@@ -210,9 +249,9 @@ def sweep():
                 gamma=config.gamma,
                 flight_dome_size=config.flight_dome_size,
                 n_steps=config.n_steps,
-                final_agent_analysis=False,  # W&B handles plotting
+                exp_analysis=False,  # W&B handles plotting
             )
-    
+
     # Run sweep
     wandb.agent(sweep_id, train_sweep, count=10)
 

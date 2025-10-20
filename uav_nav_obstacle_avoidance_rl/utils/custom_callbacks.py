@@ -92,15 +92,9 @@ class TrainMetricsCallback(BaseCallback):
 
             for env_idx, env in enumerate(envs):
                 # find the underlying UAV environment - peel wrappers to find the VectorVoyagerEnv
-                underlying_env = env
-                while hasattr(underlying_env, "env"):
-                    if hasattr(underlying_env, "waypoints") and hasattr(
-                        underlying_env, "compute_attitude"
-                    ):  # if base env has been found then stop peeling
-                        break
-                    underlying_env = underlying_env.env
+                underlying_env = env.unwrapped  # my custom env
 
-                state = underlying_env.env.state(0)
+                state = underlying_env.env.state(0)  # state from Aviary env
                 lin_pos = state[3]  # [x, y, z] position
                 lin_vel = state[2]  # [u, v, w] velocity
 
@@ -303,7 +297,7 @@ class CustomEvalCallback(EvalCallback):
                 deterministic=self.deterministic,
                 return_episode_rewards=True,
                 warn=self.warn,
-                callback=self._log_eval_callback,
+                callback=self._log_eval_callback,  # evaluate_policy itself calls the callback function and passes locals() and globals() to it
             )
 
             # log detailed eval metrics to W&B
@@ -390,19 +384,9 @@ class CustomEvalCallback(EvalCallback):
 
             # identify env
             if hasattr(self.eval_env, "envs"):
-                env = self.eval_env.envs[0]
+                underlying_env = self.eval_env.envs[0].unwrapped
             else:
-                env = self.eval_env
-
-            # find the underlying UAV environment - peel wrappers to find the VectorVoyagerEnv
-            underlying_env = env
-            while hasattr(underlying_env, "env"):
-                if hasattr(underlying_env, "waypoints") and hasattr(
-                    underlying_env, "compute_attitude"
-                ):  # if base env has been found then stop peeling
-                    # underlying_env = underlying_env.env
-                    break
-                underlying_env = underlying_env.env
+                underlying_env = self.eval_env.unwrapped
 
             state = underlying_env.env.state(0)  # capture state from Aviary env
             lin_pos = state[3]  # [x, y, z] position

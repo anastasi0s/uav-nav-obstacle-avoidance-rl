@@ -26,10 +26,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # Obstacle parameters
         enable_obstacles: bool = True,
         visual_obstacles: bool = False,  # visual representation of obstacles used e.g. in evaluation when recording video
-        num_obstacles: tuple[int, int] = (
-            0,
-            3,
-        ),  # range of number obstacles that will be spawned in the env
+        num_obstacles: tuple[int, int] = (0, 3),  # range of number obstacles that will be spawned in the env
         obstacle_types: list[str] = ["sphere", "box", "cylinder"],
         obstacle_size_range: tuple[float, float] = (0.1, 0.8),
         obstacle_min_distance_from_start: float = 1.0,  # min distance from uav start point to spawn obstacle from in meter

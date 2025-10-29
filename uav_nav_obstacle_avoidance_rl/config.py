@@ -9,6 +9,9 @@ from rich.traceback import install
 # load environment variables from .env file if it exists
 load_dotenv()
 
+# random seed as a consatant for experiment reproducibility
+RANDOM_SEED = 319
+
 # PATHS ------------------------------------------------------------------------------------------------- #
 PROJ_ROOT = Path(__file__).resolve().parents[1]
 REPORTS_DIR = PROJ_ROOT / "reports"

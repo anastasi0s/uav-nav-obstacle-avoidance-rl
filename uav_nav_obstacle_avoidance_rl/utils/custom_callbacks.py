@@ -1,4 +1,3 @@
-import random
 from typing import Dict, Optional
 
 import numpy as np
@@ -9,7 +8,10 @@ from plotly.subplots import make_subplots
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 
-from uav_nav_obstacle_avoidance_rl.config import logger
+from uav_nav_obstacle_avoidance_rl import config
+
+logger = config.logger
+rng = np.random.default_rng(config.RANDOM_SEED)
 
 
 class TrainMetricsCallback(BaseCallback):
@@ -974,9 +976,7 @@ class CustomEvalCallback(EvalCallback):
         """Create and log evaluation trajectory plot for an episode"""
         try:
             episodes = self.current_eval_cycle_data["success"]
-            picked_episodes = random.sample(
-                range(len(episodes)), min(1, len(episodes))
-            )  # pick 3 episode
+            picked_episodes = rng.choice(len(episodes), size=3, replace=False).tolist()
 
             for idx, ep_idx in enumerate(picked_episodes):
                 positions = self.current_eval_cycle_data[

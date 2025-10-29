@@ -1,9 +1,92 @@
-from typing import Any, Literal
+from typing import Any, Literal, Dict, Tuple
 
 import gymnasium as gym
 import numpy as np
 from PyFlyt.gym_envs.quadx_envs.quadx_base_env import QuadXBaseEnv
 from PyFlyt.gym_envs.utils.waypoint_handler import WaypointHandler
+from uav_nav_obstacle_avoidance_rl import config
+
+logger = config.logger
+rng = np.random.default_rng(config.RANDOM_SEED)
+
+class VoxelGrid:
+    """ 3d voxel grid for discretizing the space and placing obstacles"""
+
+    def __init__(self, grid_sizes: Tuple[float, float, float], voxel_size: float):
+        """
+        initialize voxel grid
+
+        args:
+            grid_sizes: the size of each grid dimension in meter (x_size, y_size, z_size)
+            voxel_size: size of each voxel cube in meter
+        """
+        self.x_size, self.y_size, self.z_size = grid_sizes
+        
+        # calculate min, max of each dimension
+        x_magnitude, y_magnitude, z_magnitude = self.x_size / 2, self.y_size / 2, self.z_size / 2  # calculate magnitude from origin of each dimension
+        self.x_min, self.x_max = -x_magnitude, x_magnitude
+        self.y_min, self.y_max = -y_magnitude, y_magnitude
+        self.z_min, self.z_max = -z_magnitude, z_magnitude
+        self.voxel_size = voxel_size
+
+        # claculate grid dimensions 
+        self.nx = int(np.floor(self.x_size / self.voxel_size))  # floor division -> voxel grid might be slightly smaller than space
+        self.ny = int(np.floor(self.y_size / self.voxel_size))
+        self.nz = int(np.floor(self.z_size / self.voxel_size))
+
+        # initialize occupancy grid
+        self.grid = np.zeros((self.nx, self.ny, self.nz), dtype=bool)
+
+        print(f"Voxel Grid initialized: {self.nx}x{self.ny}x{self.nz} voxels")
+        print(f"Total voxels: {self.nx * self.ny * self.nz}")
+
+    def world_to_voxel(self, position: np.ndarray) -> Tuple[int, int, int]:
+        """convert 3d world coordinates into voxel indices"""
+        x, y, z = position
+        i = int(np.floor((x - self.x_min) / self.voxel_size))
+        j = int(np.floor((y - self.y_min) / self.voxel_size))
+        k = int(np.floor(z - self.z_min / self.voxel_size))
+        return i, j, k  # voxel indices
+    
+    def voxel_to_world(self, voxel_idx: Tuple[int, int, int]) -> np.ndarray:
+        """convert voxel idx to cartesian world position coordinates (+0.5: conter of voxel)"""
+        i, j, k = voxel_idx
+        x = self.x_min + (i + 0.5) * self.voxel_size
+        y = self.y_min + (i + 0.5) * self.voxel_size
+        z = self.z_min + (i + 0.5) * self.voxel_size
+        return np.array([x, y, z])  # cartesian position
+    
+    def is_voxel_free(self, voxel_idx: Tuple[int, int, int]) -> bool:
+        """check if a voxel is free (not occupied)"""
+        i, j, k = voxel_idx
+        # check if voxel_idx is inside bounds
+        if (0 <= i < self.nx and 0 <= j < self.ny and 0 <= k < self.nz):
+            free = not self.grid[i, j, k]
+        else:
+            logger.debug(f"OUT OF BOUNDS INDEX: Trying to access out of bounds grid index: ({i}, {j}, {k})")
+        return free
+    
+    def mark_voxel_occupied(self, voxel_idx: Tuple[int, int, int]):
+        i, j, k = voxel_idx
+        if (0 <= i < self.nx and 0 <= j < self.ny and 0 <= k < self.nz):
+            self.grid[i, j, k] = True
+        else:
+            logger.debug(f"OUT OF BOUNDS INDEX: Trying to access out of bounds grid index: ({i}, {j}, {k})")
+
+    def get_random_free_voxel(self) -> Tuple[int, int, int]:
+        """get free grid position"""
+        free_voxels = np.argwhere(~self.grid)
+        if len(free_voxels) == 0:
+            logger.error("No free voxels available!")
+            raise ValueError("No free voxels available!")
+        idx = rng.choice(free_voxels)
+        return tuple(idx)
+    
+    def get_random_free_position(self) -> np.ndarray:
+        """ger free cartesian position"""
+        voxel_idx = self.get_random_free_voxel()
+        position_coordinates = self.voxel_to_world(voxel_idx)
+        return position_coordinates
 
 
 # my waypoint environment based on PyFlyt/QuadX-Waypoints-v3
@@ -23,14 +106,6 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         render_mode: None | Literal["human", "rgb_array"] = None,
         render_resolution: tuple[int, int] = (480, 480),
         min_height: float = 0.1,  # min allowed hight, collision is detected if below that height
-        # Obstacle parameters
-        enable_obstacles: bool = True,
-        visual_obstacles: bool = False,  # visual representation of obstacles used e.g. in evaluation when recording video
-        num_obstacles: tuple[int, int] = (0, 3),  # range of number obstacles that will be spawned in the env
-        obstacle_types: list[str] = ["sphere", "box", "cylinder"],
-        obstacle_size_range: tuple[float, float] = (0.1, 0.8),
-        obstacle_min_distance_from_start: float = 1.0,  # min distance from uav start point to spawn obstacle from in meter
-        obstacle_hight_range: tuple[float, float] = (0.1, 5.0),
     ):
         # init parent class (QuadxBaseEnv)
         super().__init__(
@@ -50,29 +125,6 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.sparse_reward = sparse_reward
         self.flight_dome_size = flight_dome_size
 
-        # obstacle config
-        self.enable_obstacles = enable_obstacles
-        self.visual_obstacles = visual_obstacles
-        self.num_obstacles = num_obstacles
-        self.obstacle_types = obstacle_types
-        self.obstacle_size_range = obstacle_size_range
-        self.obstacle_min_distance_from_start = obstacle_min_distance_from_start
-        self.obstacle_spawn_radius = (
-            self.flight_dome_size - 1.0
-        )  # 1m less than spawn radius
-        self.obstacle_hight_range = obstacle_hight_range
-        self.obstacle_colors = [
-            [0.8, 0.2, 0.2, 1.0],  # Red
-            [0.2, 0.8, 0.2, 1.0],  # Green
-            [0.2, 0.2, 0.8, 1.0],  # Blue
-            [0.8, 0.8, 0.2, 1.0],  # Yellow
-            [0.8, 0.2, 0.8, 1.0],  # Magenta
-            [0.2, 0.8, 0.8, 1.0],  # Cyan
-        ]
-        # track spawned obstacles
-        self.obstacle_ids = []
-        self.obstacle_collision_shapes = []
-        self.obstacle_visual_shapes = []
 
         # define waypoint navigation – init waypoint handler
         self.waypoints = WaypointHandler(
@@ -136,158 +188,11 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             self.env, self.np_random
         )  # reset waypoint handler, which sets the current target
 
-        # spawn and register new random obstacle bodies
-        self._spawn_obstacles()
-        self.env.register_all_new_bodies()
-
         # init tracked metrics
         self.info["num_targets_reached"] = 0
-        self.info["num_obstacles_spawned"] = len(self.obstacle_ids)
         super().end_reset()  # finish reset using base env producers
 
         return self.state, self.info
-
-    def _remove_obstacles(self):
-        pass
-
-    def _spawn_obstacles(self):
-        """spawn random obstacles in the environment"""
-        # determine num of obstacles to spawn
-        min_obs, max_obs = self.num_obstacles
-        num_obstacles = self.np_random.integers(min_obs, max_obs + 1)
-
-        uav_start_pos = self.start_pos[0]
-
-        for i in range(num_obstacles):
-            # generate random obstacle properties
-            obstacle_type = self.np_random.choice(self.obstacle_types)
-            position = self._generate_obstacle_position(uav_start_pos)
-            orientation = [0, 0, 0, 1]
-            size = self._generate_obstacle_size(obstacle_type)
-            color = self.obstacle_colors[i % len(self.obstacle_colors)]
-
-            # create collision and visual shapes
-            collision_id = self._create_collision_id(obstacle_type, size)
-            if self.visual_obstacles:
-                visual_id = self._create_visual_id(
-                    obstacle_type, size, color
-                )  # visible obstacles
-            else:
-                visual_id = -1  # invisible objects
-
-            object_id = self.env.createMultiBody(
-                baseMass=0.0,  # 0.0: static obstacles, >0: dynamic obstacles
-                baseVisualShapeIndex=int(visual_id),
-                baseCollisionShapeIndex=int(collision_id),
-                basePosition=position,
-                baseOrientation=orientation,
-            )
-
-            # track spawned obstacles
-            self.obstacle_ids.append(object_id)
-            self.obstacle_collision_shapes.append(collision_id)
-            self.obstacle_visual_shapes.append(visual_id)
-
-    def _generate_obstacle_position(self, uav_start_pos):
-        """generate random position for an obstacle inside hemisphere"""
-        max_attempts = 50
-
-        for _ in range(max_attempts):
-            # determine random spawn position inside dome boundaries
-            # θ = [0, 2pi], φ = [0, pi/2]
-            # x = r * sin(φ) * cos(θ), y = r * cos(φ) * sin(θ), z = r * cos(φ)
-            theta = self.np_random.uniform(0, np.pi * 2)  # azimuth angle
-            phi = self.np_random.uniform(0, np.pi / 2)  # polar angle for hemisphere
-            radius = self.np_random.uniform(
-                self.obstacle_min_distance_from_start, self.obstacle_spawn_radius
-            )  # distance from origin
-
-            x = radius * np.sin(phi) * np.cos(theta)
-            y = radius * np.sin(phi) * np.sin(theta)
-            z = radius * np.cos(phi)
-
-            # min hight constraint
-            z = max(z, self.obstacle_hight_range[0])
-
-            position = [x, y, z]
-
-            # Check distance from UAV start position
-            distance_to_uav = np.linalg.norm(np.array(position) - uav_start_pos)
-
-            if distance_to_uav >= self.obstacle_min_distance_from_start:
-                return position
-
-            # fallback position if all attempts failed
-            return [self.obstacle_spawn_radius * 0.8, 0, 1.5]
-
-    def _generate_obstacle_size(self, obstacle_type):
-        """generate random size parameters for each obstacle type"""
-        base_size = self.np_random.uniform(*self.obstacle_size_range)
-
-        if obstacle_type == "sphere":
-            return base_size  # radius
-        elif obstacle_type == "box":
-            # half extents [x, y, z]
-            return [
-                base_size * self.np_random.uniform(0.5, 2.0),
-                base_size * self.np_random.uniform(0.5, 2.0),
-                base_size * self.np_random.uniform(0.5, 2.0),
-            ]
-        elif obstacle_type == "cylinder":
-            # radius, hight
-            return [
-                base_size,
-                base_size * self.np_random.uniform(0.5, 2.0),
-            ]
-        else:
-            return base_size
-
-    def _create_collision_id(self, obstacle_type, size):
-        """create collision and visual shapes for an obstacle"""
-
-        if obstacle_type == "sphere":
-            collision_id = self.env.createCollisionShape(
-                shapeType=self.env.GEOM_SPHERE,
-                radius=size,
-            )
-
-        elif obstacle_type == "box":
-            collision_id = self.env.createCollisionShape(
-                shapeType=self.env.GEOM_BOX, halfExtents=size
-            )
-
-        elif obstacle_type == "cylinder":
-            radius, height = size
-            collision_id = self.env.createCollisionShape(
-                shapeType=self.env.GEOM_CYLINDER, radius=radius, height=height
-            )
-
-        return collision_id
-
-    def _create_visual_id(self, obstacle_type, size, color):
-        """create collision and visual shapes for an obstacle"""
-        if obstacle_type == "sphere":
-            visual_id = self.env.createVisualShape(
-                shapeType=self.env.GEOM_SPHERE,
-                radius=size,
-                rgbaColor=color,
-            )
-
-        elif obstacle_type == "box":
-            visual_id = self.env.createVisualShape(
-                shapeType=self.env.GEOM_BOX, halfExtents=size, rgbaColor=color
-            )
-
-        elif obstacle_type == "cylinder":
-            radius, height = size
-            visual_id = self.env.createVisualShape(
-                shapeType=self.env.GEOM_CYLINDER,
-                radius=radius,
-                length=height,  # for visual shape, use length instead of height
-                rgbaColor=color,
-            )
-
-        return visual_id
 
     # this is called in the step function of the QuadXBaseEnv parent class -> new observation
     def compute_state(self) -> None:
@@ -300,16 +205,12 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         attitude[1] = ang_pos[2]  # (1,) - yaw, rotation position
         attitude[2:5] = lin_vel  # (3,) - body frame linear velocity vector (u, v, w)
         attitude[5] = lin_pos[2]  # (1,) - z position
-        attitude[6:10] = (
-            self.action
-        )  # (4,) - previous actions  # TODO check for other methods to capture temporal information of taken actions
+        attitude[6:10] = (self.action)  # (4,) - previous actions  # TODO check for other methods to capture temporal information of taken actions
 
         # # create empty array of type float32 -> compute the target deltas with the method from the waypointhandler -> fill array
         # target_deltas = np.empty((1,3), dtype=np.float32)
         # target_deltas[0, :] = self.waypoints.distance_to_targets(ang_pos, lin_pos, quaternion)
-        target_deltas = self.waypoints.distance_to_targets(
-            ang_pos, lin_pos, quaternion
-        ).astype(np.float32)
+        target_deltas = self.waypoints.distance_to_targets(ang_pos, lin_pos, quaternion).astype(np.float32)
 
         # update the current state
         self.state = {"attitude": attitude, "target_deltas": target_deltas}
@@ -333,9 +234,12 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # on reaching the target waypoint
         if self.waypoints.target_reached:
             self.reward = 100.0  # large reward bonus
+            
             # go to the next target if available
             self.waypoints.advance_targets()
+            
             # update termination: if all targets are reached, signal environment completion
             self.truncation |= self.waypoints.all_targets_reached
             self.info["env_complete"] = self.waypoints.all_targets_reached
             self.info["num_targets_reached"] = self.waypoints.num_targets_reached
+

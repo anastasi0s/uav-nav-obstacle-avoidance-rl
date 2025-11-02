@@ -7,7 +7,9 @@ from stable_baselines3.common.env_util import make_vec_env
 from wandb.integration.sb3 import WandbCallback
 
 from uav_nav_obstacle_avoidance_rl import config
-from uav_nav_obstacle_avoidance_rl.utils import custom_callbacks, env_helpers
+from uav_nav_obstacle_avoidance_rl.utils import env_helpers
+from uav_nav_obstacle_avoidance_rl.utils.eval_metrics_callback import CustomEvalCallback
+from uav_nav_obstacle_avoidance_rl.utils.train_metrics_callback import TrainMetricsCallback
 
 logger = config.logger
 app = typer.Typer()
@@ -23,7 +25,7 @@ def run_exp(
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     wandb_tags: list[str] | None = None,
     
-    # Environment hyperparameters
+    # Environment parameters
     num_targets: int = 1,
     flight_dome_size: float = 5.0,
     max_duration_seconds: float = 80.0,
@@ -167,7 +169,7 @@ def run_exp(
     callbacks.append(wandb_callback)
 
     # add custom train metrics callback
-    train_callback = custom_callbacks.TrainMetricsCallback(
+    train_callback = TrainMetricsCallback(
         run_path=wandb_run.dir,
         # model_save_path=f"{wandb_run.dir}/models",
         verbose=2,
@@ -175,7 +177,7 @@ def run_exp(
     callbacks.append(train_callback)
 
     # add custom evaluation metrics callback
-    eval_callback = custom_callbacks.CustomEvalCallback(
+    eval_callback = CustomEvalCallback(
         vec_env_eval,
         best_model_save_path=f"{wandb_run.dir}/models",
         log_path=wandb_run.dir,

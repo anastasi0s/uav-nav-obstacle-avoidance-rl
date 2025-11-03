@@ -7,13 +7,12 @@ from PyFlyt.gym_envs.utils.waypoint_handler import WaypointHandler
 from uav_nav_obstacle_avoidance_rl import config
 
 logger = config.logger
-rng = np.random.default_rng(config.RANDOM_SEED)
 
 
 class VoxelGrid:
     """ 3d voxel grid for discretizing the space and placing obstacles"""
 
-    def __init__(self, grid_sizes: Tuple[float, float, float], voxel_size: float):
+    def __init__(self, grid_sizes: Tuple[float, float, float], voxel_size: float, rng):
         """
         initialize voxel grid
 
@@ -22,7 +21,8 @@ class VoxelGrid:
             voxel_size: size of each voxel cube in meter
         """
         self.x_size, self.y_size, self.z_size = grid_sizes
-        
+        self.rng = rng
+
         # calculate min, max of each dimension
         x_magnitude, y_magnitude = self.x_size / 2, self.y_size / 2  # calculate magnitude from origin of x and y dimensions
         self.x_min, self.x_max = -x_magnitude, x_magnitude
@@ -79,7 +79,7 @@ class VoxelGrid:
         if len(free_voxels) == 0:
             logger.error("No free voxels available!")
             raise ValueError("No free voxels available!")
-        idx = rng.choice(free_voxels)
+        idx = self.rng.choice(free_voxels)
         return tuple(idx)
     
     def get_random_free_position(self) -> np.ndarray:
@@ -145,7 +145,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.pybullet_client = self.env.unwrapped.env  # access PyBullet client through unwrapped environment
 
         # init voxel grid
-        self.voxel_grid = VoxelGrid(grid_sizes, voxel_size)
+        self.voxel_grid = VoxelGrid(grid_sizes, voxel_size, rng=self.np_random)
 
         # init waypoint handler
         self.waypoints = WaypointHandler(
@@ -238,19 +238,25 @@ class VectorVoyagerEnv(QuadXBaseEnv):
     def _reposition_obstacles(self):
         for i, obstacle_id in enumerate(self.obstacles):
             new_position = self.voxel_grid.get_random_free_position()
-            # reset position of obstacles
+            
+            # mark this voxel as occupied
+            voxel_id = self.voxel_grid.world_to_voxel(new_position)
+            self.voxel_grid.mark_voxel_occupied(voxel_id)
+            
+            # reset obstacle position
             self.pybullet_client.resetBasePositionAndOrientation(
                 obstacle_id,
                 posObj=new_position,
                 ornObj=[0, 0, 0, 1],
             )
 
-            # reset the velocity of obstacles
+            # reset obstacle velocity
             self.pybullet_client.resetBaseVelocity(
                 obstacle_id, 
                 linearVelocity=[0.0, 0.0, 0.0], 
                 angularVelocity=[0.0, 0.0, 0.0],
             )
+            
 
     def reset(
         self,
@@ -333,7 +339,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         if self.step_count > self.max_steps:
             self.truncation |= True
 
-        # if anything hits the floor, basically game over
+        # check for floor collision
         if np.any(self.env.contact_array[self.env.planeId]):
             self.reward = -100.0
             self.info["collision"] = True

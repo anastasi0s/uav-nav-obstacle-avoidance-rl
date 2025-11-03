@@ -203,7 +203,7 @@ def run_exp(
         vf_coef=vf_coef,
         verbose=0,
         tensorboard_log=f"{wandb_run.dir}/tensorboard",
-        seed=config.RANDOM_SEED,
+        seed=config.RANDOM_SEED,  # the seed is passed through the chain: (PPO → Gymnasium → QuadXBaseEnv → Aviary → VectorVoyagerEnv → VoxelGrid)
     )
 
     # train model

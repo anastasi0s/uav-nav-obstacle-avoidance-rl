@@ -1,12 +1,8 @@
 from typing import Dict, Optional
 
 import numpy as np
-import pandas as pd
-import plotly.graph_objects as go
 import wandb
-from plotly.subplots import make_subplots
-from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
-from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.callbacks import BaseCallback
 
 from uav_nav_obstacle_avoidance_rl import config
 

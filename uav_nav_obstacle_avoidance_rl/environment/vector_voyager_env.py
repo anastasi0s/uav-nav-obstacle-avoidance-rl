@@ -72,6 +72,11 @@ class VoxelGrid:
         i, j, k = voxel_idx
         if (0 <= i < self.nx and 0 <= j < self.ny and 0 <= k < self.nz):
             self.grid[i, j, k] = True
+    
+    def mark_voxel_free(self, voxel_idx: Tuple[int, int, int]):
+        i, j, k = voxel_idx
+        if (0 <= i < self.nx and 0 <= j < self.ny and 0 <= k < self.nz):
+            self.grid[i, j, k] = False
 
     def get_random_free_voxel(self) -> Tuple[int, int, int]:
         """get free grid position"""
@@ -96,7 +101,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # boundary parameters
         grid_sizes: Tuple[float, float, float],  # (x, y, z)
         voxel_size: float,
-        min_height: float,  # default: 0.1,  min allowed hight, collision is detected if below that height
+        min_height: float = 0.0,  # default: 0.1,  min allowed hight, collision is detected if below that height
         
         # waypoint parameters
         num_targets: int = 1,
@@ -120,7 +125,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
     ):
         # init parent class (QuadxBaseEnv)
         super().__init__(
-            start_pos=np.array([[0.0, 0.0, 1.0]]),  # uav starting at pos [0, 0, 1] # TODO implement random spawning on grid
+            start_pos=np.array([[0.0, 0.0, 1.0]]),  # uav starting at pos [0, 0, 1]. Is randomized and overwritten in reset()
             flight_mode=flight_mode,
             # flight_dome_size=flight_dome_size,  # this is used only in a method of the parent class which has been overwritten by my custom env 
             max_duration_seconds=max_duration_seconds,
@@ -154,7 +159,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             use_yaw_targets=use_yaw_targets,
             goal_reach_distance=goal_reach_distance,
             goal_reach_angle=goal_reach_angle,
-            flight_dome_size=min(grid_sizes),  # HACK adjust this
+            flight_dome_size=min(grid_sizes),  # this is obsolete because _create_targets() is used for target setting
             min_height=min_height,
             np_random=self.np_random,
         )
@@ -194,7 +199,20 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             }
         )
 
-    def _create_obstacles(self, num_obstacles: int, obstacle_size_range: Tuple[int, int] = (1, 3)):
+    def _create_targets(self) -> np.ndarray:
+        """create waypoint targets that respect the voxel grid and obstacles"""
+        targets = []
+        for _ in range(self.num_targets):
+            free_voxel = self.voxel_grid.get_random_free_voxel()
+            new_position = self.voxel_grid.voxel_to_world(free_voxel)
+            targets.append(new_position)
+
+            # mark the voxel as occupied, this will prevent spawning obstacles in the same voxel
+            self.voxel_grid.mark_voxel_occupied(free_voxel)
+
+        return np.array(targets, dtype=np.float32)
+
+    def _create_obstacles(self, num_obstacles: int):
         """
         init obstacles: create all obstacle bodies
         """
@@ -204,15 +222,15 @@ class VectorVoyagerEnv(QuadXBaseEnv):
                 # create visual shape
                 visual_id = self.pybullet_client.createVisualShape(
                     shapeType=self.pybullet_client.GEOM_CYLINDER,
-                    radius=self.voxel_size // 2,
-                    height=self.grid_sizes[-1],
+                    radius=self.voxel_size / 2,
+                    height=self.grid_sizes[-1],  # obstacles have full hight of the environment (from ground to sealing)
                     rgbaColor=[0.8, 0.2, 0.2, 1.0],
                 )
 
             # create collision shape
             collision_id = self.pybullet_client.createCollisionShape(
                 shapeType=self.pybullet_client.GEOM_CYLINDER,
-                radius=self.voxel_size // 2,
+                radius=self.voxel_size / 2,
                 height=self.grid_sizes[-1],
             )
 
@@ -237,11 +255,11 @@ class VectorVoyagerEnv(QuadXBaseEnv):
 
     def _reposition_obstacles(self):
         for i, obstacle_id in enumerate(self.obstacles):
-            new_position = self.voxel_grid.get_random_free_position()
+            free_voxel = self.voxel_grid.get_random_free_voxel()
+            new_position = self.voxel_grid.voxel_to_world(free_voxel)
             
             # mark this voxel as occupied
-            voxel_id = self.voxel_grid.world_to_voxel(new_position)
-            self.voxel_grid.mark_voxel_occupied(voxel_id)
+            self.voxel_grid.mark_voxel_occupied(free_voxel)
             
             # reset obstacle position
             self.pybullet_client.resetBasePositionAndOrientation(
@@ -257,20 +275,31 @@ class VectorVoyagerEnv(QuadXBaseEnv):
                 angularVelocity=[0.0, 0.0, 0.0],
             )
             
-
     def reset(
         self,
         *,
         seed: None | int = None,
-        options: None | dict[str, Any] = dict(),
+        options: None | dict[str, Any] = None,
         drone_options: None | dict[str, Any] = None,
     ) -> tuple[dict[Literal["attitude", "target_deltas"], np.ndarray], dict]:
         """
         rest the env: resets simulation state, the waypoint hnadler, and any other counters
         """
+        if options is None:
+            options = {}
+
+        # create random UAV start position and set it
+        free_voxel = self.voxel_grid.get_random_free_voxel()
+        start_pos = self.voxel_grid.voxel_to_world(free_voxel)
+        self.start_pos = start_pos.reshape(1, -1)  # reshape 1D array to 2D array with shape (1, 3), overwrites the base env start_pos attribute
+
+        
         # start reset procedure using the base env's methods
         super().begin_reset(seed, drone_options=drone_options)
         self.waypoints.reset(self.env, self.np_random)  # reset waypoint handler, which sets the current target
+
+        # create targets manually from voxel grid and overwrite the targets attribute
+        self.waypoints.targets = self._create_targets()
 
         # reposition obstacles in space
         self._reposition_obstacles()
@@ -339,7 +368,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         if self.step_count > self.max_steps:
             self.truncation |= True
 
-        # check for floor collision
+        # check for collisions with obstacles and the floor
         if np.any(self.env.contact_array[self.env.planeId]):
             self.reward = -100.0
             self.info["collision"] = True
@@ -352,8 +381,8 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         x, y, z = lin_pos
 
         if (x < self.voxel_grid.x_min or x > self.voxel_grid.x_max or
-            y < self.voxel_grid.y_min or y > self.voxel_grid.y_max or
-            z < self.min_height or z > self.voxel_grid.z_max  # z is constrained by the min hight the uav is allowed to fly
+            y < self.voxel_grid.y_min or y > self.voxel_grid.y_max
+            # z < self.min_height or z > self.voxel_grid.z_max  # z is constrained by the min hight the uav is allowed to fly
         ):
             self.reward = -100.0
             self.info["out_of_bounds"] = True

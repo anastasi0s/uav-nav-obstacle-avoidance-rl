@@ -11,7 +11,6 @@ from stable_baselines3.common.evaluation import evaluate_policy
 from uav_nav_obstacle_avoidance_rl import config
 
 logger = config.logger
-rng = np.random.default_rng(config.RANDOM_SEED)
 
 
 class CustomEvalCallback(EvalCallback):
@@ -26,6 +25,8 @@ class CustomEvalCallback(EvalCallback):
 
         # initialize parent with remaining kwargs
         super().__init__(*args, **kwargs)
+
+        self.rng = np.random.default_rng(config.RANDOM_SEED)
 
         # store reference to underlying env (unwrap), vectorvoyager
         if hasattr(self.eval_env, "envs"):
@@ -752,7 +753,7 @@ class CustomEvalCallback(EvalCallback):
         """Create and log evaluation trajectory plot for an episode"""
         try:
             episodes = self.current_eval_cycle_data["success"]
-            picked_episodes = rng.choice(len(episodes), size=3, replace=False).tolist()
+            picked_episodes = self.rng.choice(len(episodes), size=3, replace=False).tolist()
 
             for idx, ep_idx in enumerate(picked_episodes):
                 positions = self.current_eval_cycle_data[

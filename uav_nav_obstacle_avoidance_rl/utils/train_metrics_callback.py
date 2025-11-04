@@ -7,7 +7,6 @@ from stable_baselines3.common.callbacks import BaseCallback
 from uav_nav_obstacle_avoidance_rl import config
 
 logger = config.logger
-rng = np.random.default_rng(config.RANDOM_SEED)
 
 
 class TrainMetricsCallback(BaseCallback):

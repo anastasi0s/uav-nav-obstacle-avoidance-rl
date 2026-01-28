@@ -4,94 +4,10 @@ import gymnasium as gym
 import numpy as np
 from PyFlyt.gym_envs.quadx_envs.quadx_base_env import QuadXBaseEnv
 from PyFlyt.gym_envs.utils.waypoint_handler import WaypointHandler
+from uav_nav_obstacle_avoidance_rl.environment.voxel_grid import VoxelGrid
 from uav_nav_obstacle_avoidance_rl import config
 
 logger = config.logger
-
-
-class VoxelGrid:
-    """ 3d voxel grid for discretizing the space and placing obstacles"""
-
-    def __init__(self, grid_sizes: Tuple[float, float, float], voxel_size: float, rng):
-        """
-        initialize voxel grid
-
-        args:
-            grid_sizes: the size of each grid dimension in meter (x_size, y_size, z_size)
-            voxel_size: size of each voxel cube in meter
-        """
-        self.x_size, self.y_size, self.z_size = grid_sizes
-        self.rng = rng
-
-        # calculate min, max of each dimension
-        x_magnitude, y_magnitude = self.x_size / 2, self.y_size / 2  # calculate magnitude from origin of x and y dimensions
-        self.x_min, self.x_max = -x_magnitude, x_magnitude
-        self.y_min, self.y_max = -y_magnitude, y_magnitude
-        self.z_min, self.z_max = 0.0, self.z_size  # z dim (hight) can only be positive 
-        self.voxel_size = voxel_size
-
-        # claculate grid dimensions 
-        self.nx = int(np.floor(self.x_size / self.voxel_size))  # floor division -> voxel grid might be slightly smaller than space
-        self.ny = int(np.floor(self.y_size / self.voxel_size))
-        self.nz = int(np.floor(self.z_size / self.voxel_size))
-
-        # initialize occupancy grid
-        self.grid = np.zeros((self.nx, self.ny, self.nz), dtype=bool)
-
-        print(f"Voxel Grid initialized: {self.nx}x{self.ny}x{self.nz} voxels")
-        print(f"Total voxels: {self.nx * self.ny * self.nz}")
-
-    def world_to_voxel(self, position: np.ndarray) -> Tuple[int, int, int]:
-        """convert 3d world coordinates into voxel indices"""
-        x, y, z = position
-        i = int(np.floor((x - self.x_min) / self.voxel_size))
-        j = int(np.floor((y - self.y_min) / self.voxel_size))
-        k = int(np.floor((z - self.z_min) / self.voxel_size))
-        return i, j, k  # voxel indices
-    
-    def voxel_to_world(self, voxel_idx: Tuple[int, int, int]) -> np.ndarray:
-        """convert voxel idx to cartesian world position coordinates (+0.5: conter of voxel)"""
-        i, j, k = voxel_idx
-        x = self.x_min + (i + 0.5) * self.voxel_size
-        y = self.y_min + (j + 0.5) * self.voxel_size
-        z = self.z_min + (k + 0.5) * self.voxel_size
-        return np.array([x, y, z])  # cartesian position
-    
-    def is_voxel_free(self, voxel_idx: Tuple[int, int, int]) -> bool:
-        """check if a voxel is free (not occupied)"""
-        i, j, k = voxel_idx
-        # check if voxel_idx is inside bounds
-        if (0 <= i < self.nx and 0 <= j < self.ny and 0 <= k < self.nz):
-            free = not self.grid[i, j, k]
-        else:
-            # checking voxel_idx outside bounds
-            free = False
-        return free
-    
-    def mark_voxel_occupied(self, voxel_idx: Tuple[int, int, int]):
-        i, j, k = voxel_idx
-        if (0 <= i < self.nx and 0 <= j < self.ny and 0 <= k < self.nz):
-            self.grid[i, j, k] = True
-    
-    def mark_voxel_free(self, voxel_idx: Tuple[int, int, int]):
-        i, j, k = voxel_idx
-        if (0 <= i < self.nx and 0 <= j < self.ny and 0 <= k < self.nz):
-            self.grid[i, j, k] = False
-
-    def get_random_free_voxel(self) -> Tuple[int, int, int]:
-        """get free grid position"""
-        free_voxels = np.argwhere(~self.grid)
-        if len(free_voxels) == 0:
-            logger.error("No free voxels available!")
-            raise ValueError("No free voxels available!")
-        idx = self.rng.choice(free_voxels)
-        return tuple(idx)
-    
-    def get_random_free_position(self) -> np.ndarray:
-        """ger free cartesian position"""
-        voxel_idx = self.get_random_free_voxel()
-        position_coordinates = self.voxel_to_world(voxel_idx)
-        return position_coordinates
 
 
 # my waypoint environment based on PyFlyt/QuadX-Waypoints-v3
@@ -147,7 +63,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.obstacle_strategy = obstacle_strategy
         self.num_obstacles = num_obstacles
         self.visual_obstacles = visual_obstacles
-        self.pybullet_client = self.env.unwrapped.env  # access PyBullet client through unwrapped environment
+        self.obstacles = []  # store PyBullet body IDs
 
         # init voxel grid
         self.voxel_grid = VoxelGrid(grid_sizes, voxel_size, rng=self.np_random)
@@ -164,8 +80,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             np_random=self.np_random,
         )
 
-        # init obstacles: create all obstacle bodies at the start
-        self._create_obstacles(num_obstacles=self.num_obstacles)
+        # Note: obstacles will be created in the first reset() call when self.env (Aviary/Pybullet client) is available. Pybullet connections from gym are created after env reset()
 
         # define action space
         # according to the DJI Inspire 3 specifications:
@@ -214,29 +129,28 @@ class VectorVoyagerEnv(QuadXBaseEnv):
 
     def _create_obstacles(self, num_obstacles: int):
         """
-        init obstacles: create all obstacle bodies
+        init obstacles: create obstacle bodies
         """
-        self.obstacles = []  # store PyBullet body IDs
         for i in range(num_obstacles):
             if self.visual_obstacles:
                 # create visual shape
-                visual_id = self.pybullet_client.createVisualShape(
-                    shapeType=self.pybullet_client.GEOM_CYLINDER,
+                visual_id = self.env.createVisualShape(
+                    shapeType=self.env.GEOM_CYLINDER,
                     radius=self.voxel_size / 2,
-                    height=self.grid_sizes[-1],  # obstacles have full hight of the environment (from ground to sealing)
+                    length=self.grid_sizes[-1],  # obstacles have full hight of the environment (from ground to sealing)
                     rgbaColor=[0.8, 0.2, 0.2, 1.0],
                 )
 
             # create collision shape
-            collision_id = self.pybullet_client.createCollisionShape(
-                shapeType=self.pybullet_client.GEOM_CYLINDER,
+            collision_id = self.env.createCollisionShape(
+                shapeType=self.env.GEOM_CYLINDER,
                 radius=self.voxel_size / 2,
                 height=self.grid_sizes[-1],
             )
 
             if self.visual_obstacles:
                 # create visual body id
-                object_id = self.pybullet_client.createMultiBody(
+                object_id = self.env.createMultiBody(
                     baseMass=0.0,  # Mass=0 -> Static obstacles
                     baseVisualShapeIndex=int(visual_id),
                     baseCollisionShapeIndex=int(collision_id),
@@ -245,33 +159,37 @@ class VectorVoyagerEnv(QuadXBaseEnv):
                 )
             else:
                 # create only collision body id
-                object_id = self.pybullet_client.createMultiBody(
+                object_id = self.env.createMultiBody(
                     baseMass=0.0,
                     baseCollisionShapeIndex=int(collision_id),
                     basePosition=[0,0,-10],
                 )
-            
+
             self.obstacles.append(object_id)
 
-    def _reposition_obstacles(self):
+    def _distribute_obstacles(self):
+        """distribute obstacles to positions of free voxels"""
         for i, obstacle_id in enumerate(self.obstacles):
             free_voxel = self.voxel_grid.get_random_free_voxel()
             new_position = self.voxel_grid.voxel_to_world(free_voxel)
-            
+
+            # readjust the hight to spawn full-hight cylinders
+            new_position[2] = self.voxel_grid.z_min + (self.voxel_grid.z_size / 2)
+
             # mark this voxel as occupied
             self.voxel_grid.mark_voxel_occupied(free_voxel)
-            
-            # reset obstacle position
-            self.pybullet_client.resetBasePositionAndOrientation(
+
+            # reset obstacle position in pybullet
+            self.env.resetBasePositionAndOrientation(
                 obstacle_id,
                 posObj=new_position,
                 ornObj=[0, 0, 0, 1],
             )
 
             # reset obstacle velocity
-            self.pybullet_client.resetBaseVelocity(
-                obstacle_id, 
-                linearVelocity=[0.0, 0.0, 0.0], 
+            self.env.resetBaseVelocity(
+                obstacle_id,
+                linearVelocity=[0.0, 0.0, 0.0],
                 angularVelocity=[0.0, 0.0, 0.0],
             )
             
@@ -284,29 +202,42 @@ class VectorVoyagerEnv(QuadXBaseEnv):
     ) -> tuple[dict[Literal["attitude", "target_deltas"], np.ndarray], dict]:
         """
         rest the env: resets simulation state, the waypoint hnadler, and any other counters
+    
+        NOTE: begin_reset() creates a NEW Aviary each time, disconnecting the old one.
+        This means all PyBullet bodies (including obstacles) are destroyed.
+        Obstacles must be recreated after each begin_reset().
         """
         if options is None:
             options = {}
 
+        # reset occupancy voxel grid
+        self.voxel_grid.reset_occupancy()
+
         # create random UAV start position and set it
         free_voxel = self.voxel_grid.get_random_free_voxel()
         start_pos = self.voxel_grid.voxel_to_world(free_voxel)
-        self.start_pos = start_pos.reshape(1, -1)  # reshape 1D array to 2D array with shape (1, 3), overwrites the base env start_pos attribute
-
+        self.start_pos = start_pos.reshape(1, -1)  # reshape 1D array to 2D array with shape (1, 3). This overwrites the base env start_pos attribute
         
         # start reset procedure using the base env's methods
-        super().begin_reset(seed, drone_options=drone_options)
-        self.waypoints.reset(self.env, self.np_random)  # reset waypoint handler, which sets the current target
+        super().begin_reset(seed, drone_options=drone_options)  # Aviary is initialized and all PyBullet bodies (including obstacles) are destroyed. Obstacles are recreated down the line.
 
+        # reset waypoint handler, which sets the current target
+        self.waypoints.reset(self.env, self.np_random)
         # create targets manually from voxel grid and overwrite the targets attribute
         self.waypoints.targets = self._create_targets()
-
-        # reposition obstacles in space
-        self._reposition_obstacles()
+        
+        # cleat old obstacle IDs -> recreate new obstacles (after Aviary is initialized and self.env is available)
+        self.obstacles.clear()
+        self._create_obstacles(num_obstacles=self.num_obstacles)
+        # reposition obstacles to random locations (they were created at hidden position [0,0,-10])
+        self._distribute_obstacles()
 
         # init tracked metrics
         self.info["num_targets_reached"] = 0
-        super().end_reset()  # finish reset using base env producers
+        self.info["num_obstacles"] = self.num_obstacles
+        
+        # finish reset
+        super().end_reset()  # registers also all new pybullet bodies
 
         return self.state, self.info
 
@@ -349,7 +280,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
 
         # on reaching the target waypoint
         if self.waypoints.target_reached:
-            self.reward = 100.0  # large reward bonus
+            self.reward = 100.0  # large reward bonus  # TODO increment reward instead of re-assigning
             
             # go to the next target if available
             self.waypoints.advance_targets()
@@ -376,13 +307,12 @@ class VectorVoyagerEnv(QuadXBaseEnv):
 
         ## CUSTOM PART
         # check exceed rectangular bounds on cartesian grid_sizes
-        # get current position (lin_pos is at state[3])
-        lin_pos = self.env.state(0)[-1]  # [x, y, z]
-        x, y, z = lin_pos
+        lin_pos = self.env.state(0)[-1]  # get current position (lin_pos is at state[3])
+        x, y, z = lin_pos  # [x, y, z]
 
         if (x < self.voxel_grid.x_min or x > self.voxel_grid.x_max or
-            y < self.voxel_grid.y_min or y > self.voxel_grid.y_max
-            # z < self.min_height or z > self.voxel_grid.z_max  # z is constrained by the min hight the uav is allowed to fly
+            y < self.voxel_grid.y_min or y > self.voxel_grid.y_max or
+            z > self.voxel_grid.z_max  # z constrains the max hight the uav is allowed to fly. collision with the floor is checked above already!
         ):
             self.reward = -100.0
             self.info["out_of_bounds"] = True

@@ -5,7 +5,7 @@ from gymnasium.spaces import Box
 import numpy as np
 from PyFlyt.gym_envs.utils.waypoint_handler import WaypointHandler
 
-# Adapted from PyFlyt's `FlattenWaypointEnv`.
+# Vendored and adopted from PyFlyt's `FlattenWaypointEnv`.
 # Original source: https://github.com/jjshoots/PyFlyt/blob/master/PyFlyt/gym_envs/utils/flatten_waypoint_env.py 
 # This wrapper flattens the waypoint-based observation space for compatibility with vector-based agents.
 # Modifications:

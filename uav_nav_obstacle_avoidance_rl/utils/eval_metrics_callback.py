@@ -64,12 +64,14 @@ class CustomEvalCallback(EvalCallback):
                 "collision": [],
                 "out_of_bounds": [],
                 "env_complete": [],
+                "num_targets": [],
                 "targets_reached": [],
                 "episode_rewards": [],
                 "episode_lengths": [],
                 "mean_velocities": [],
                 "path_lengths": [],
                 "path_efficiencies": [],
+                "num_obstacles": [],
                 "positions_history": [],  # for trajectory plotting (nested array)
                 "velocities_history": [],  # for trajectory plotting (nested array)
                 "target_position_history": [],  # for trajectory plotting (nested array)
@@ -184,9 +186,9 @@ class CustomEvalCallback(EvalCallback):
                 self.current_episode_data["start_position"] = lin_pos.copy()
 
                 # -> capture obstacle info
-                if hasattr(self.underlying_env, 'obstacle_ids') and self.underlying_env.obstacle_ids:
+                if hasattr(self.underlying_env, 'obstacles') and self.underlying_env.obstacles:
                     obstacles_data = []
-                    for obs_id in self.underlying_env.obstacle_ids:
+                    for obs_id in self.underlying_env.obstacles:
                         try:
                             # capture obstacle position and orientation
                             pos, orn = self.underlying_env.env.getBasePositionAndOrientation(obs_id)
@@ -200,9 +202,9 @@ class CustomEvalCallback(EvalCallback):
                                     'id': obs_id,
                                     'position': np.array(pos),
                                     'orientation': np.array(orn),
-                                    'shape_type': shape_info[2],  # geometry type
-                                    'dimensions': np.array(shape_info[3]),  # dimensions
-                                    'local_frame_pos': np.array(shape_info[5]),  # local position
+                                    'shape_type': shape_info[2],  # geometry type (GEOM_SPHERE=2, GEOM_BOX=3, GEOM_CYLINDER=4)
+                                    'dimensions': np.array(shape_info[3]),  # dimensions  (radius for sphere, half-extents for box, [height, radius] for cylinder)
+                                    'local_frame_pos': np.array(shape_info[5]),  # local position  (local position relative to center of mass)
                                     'local_frame_orn': np.array(shape_info[6]),  # local orientation
                                 })
                         except Exception as obs_error:
@@ -214,7 +216,7 @@ class CustomEvalCallback(EvalCallback):
                     self.current_episode_data["obstacles"] = obstacles_data
                 else:
                     # No obstacles in this episode
-                    self.current_episode_data["obstacles"] = []
+                    self.current_episode_data["obstacles"] = ["empty"]
 
             # at episode start ->
             if self.current_episode_data["target_position"] is None:
@@ -286,8 +288,10 @@ class CustomEvalCallback(EvalCallback):
             self.current_eval_cycle_data["out_of_bounds"].append(int(out_of_bounds))
             self.current_eval_cycle_data["env_complete"].append(int(env_complete))
             self.current_eval_cycle_data["targets_reached"].append(targets_reached)
+            self.current_eval_cycle_data["num_targets"].append(len(self.current_episode_data["target_position"]))
             self.current_eval_cycle_data["episode_rewards"].append(episode_reward)
             self.current_eval_cycle_data["episode_lengths"].append(episode_length)
+            self.current_eval_cycle_data["num_obstacles"].append(info["num_obstacles"])
 
             self.current_eval_cycle_data["mean_velocities"].append(mean_velocity)
             self.current_eval_cycle_data["path_lengths"].append(path_length)
@@ -341,7 +345,7 @@ class CustomEvalCallback(EvalCallback):
         return path_length / direct_distance
 
     def _log_after_evaluation(self):
-        """log detailed evaluation metrics to W&B"""
+        """log detailed metrics of a completed evaluation-round to W&B"""
         # calculate aggregate metrics
         eval_metrics = {
             "eval_uav/success_rate": np.mean(
@@ -359,7 +363,7 @@ class CustomEvalCallback(EvalCallback):
             "eval_uav/targets_reached_mean": np.mean(
                 self.current_eval_cycle_data["targets_reached"]
             ),
-            "eval_uav/mean_velocity_mean": np.mean(
+            "eval_uav/avg_velocity_mean": np.mean(
                 self.current_eval_cycle_data["mean_velocities"]
             ),
             "eval_uav/path_length_mean": np.mean(
@@ -752,31 +756,21 @@ class CustomEvalCallback(EvalCallback):
     def _log_trajectory_plot(self):
         """Create and log evaluation trajectory plot for an episode"""
         try:
+            # pick 3 random episodes
             episodes = self.current_eval_cycle_data["success"]
             picked_episodes = self.rng.choice(len(episodes), size=3, replace=False).tolist()
 
             for idx, ep_idx in enumerate(picked_episodes):
-                positions = self.current_eval_cycle_data[
-                    "positions_history"
-                ][
-                    ep_idx
-                ][
-                    :-1
-                ]  # take one position less ([:-1]), so that the trajectory is a oneway and not a closed loop
+                positions = self.current_eval_cycle_data["positions_history"][ep_idx][:-1]  # take one position less ([:-1]), so that the trajectory is a oneway and not a closed loop
                 if len(positions) < 2:
                     return
 
-                velocities = self.current_eval_cycle_data["velocities_history"][ep_idx][
-                    :-1
-                ]
+                velocities = self.current_eval_cycle_data["velocities_history"][ep_idx][:-1]
                 reward = self.current_eval_cycle_data["episode_rewards"][ep_idx]
                 success = self.current_eval_cycle_data["success"][ep_idx]
-                target_position = self.current_eval_cycle_data[
-                    "target_position_history"
-                ][ep_idx]
-                targets_reached = self.current_eval_cycle_data["targets_reached"][
-                    ep_idx
-                ]
+                collision = self.current_eval_cycle_data["collision"][ep_idx]
+                target_position = self.current_eval_cycle_data["target_position_history"][ep_idx]
+                targets_reached = self.current_eval_cycle_data["targets_reached"][ep_idx]
 
                 # Calculate speed magnitudes
                 speed_magnitudes = np.linalg.norm(velocities, axis=1)
@@ -784,24 +778,39 @@ class CustomEvalCallback(EvalCallback):
                 # Create 3D trajectory plot
                 fig = go.Figure()
 
-                # Add semitransparent box
+                # Add wireframe box representing the flight space boundaries
+                # Get boundaries from voxel grid
+                x_min, x_max = self.underlying_env.voxel_grid.x_min, self.underlying_env.voxel_grid.x_max
+                y_min, y_max = self.underlying_env.voxel_grid.y_min, self.underlying_env.voxel_grid.y_max
+                z_min, z_max = self.underlying_env.voxel_grid.z_min, self.underlying_env.voxel_grid.z_max
 
-                box_x = 
-                box_y = 
-                box_z = 
+                # Define the 8 vertices of the box
+                vertices = np.array([
+                    [x_min, y_min, z_min], [x_max, y_min, z_min], [x_max, y_max, z_min], [x_min, y_max, z_min],
+                    [x_min, y_min, z_max], [x_max, y_min, z_max], [x_max, y_max, z_max], [x_min, y_max, z_max]
+                ])
 
-                fig.add_trace(
-                    go.Surface(
-                        x=box_x,
-                        y=box_y,
-                        z=box_z,
-                        opacity=0.2,
-                        colorscale=[[0, "lightblue"], [1, "lightblue"]],
-                        showscale=False,
-                        name="Fligh Space",
-                        hovertemplate="Flight Boundary<extra></extra>",
+                # Define the 12 edges of the box (pairs of vertex indices)
+                edges = [
+                    [0, 1], [1, 2], [2, 3], [3, 0],  # bottom face
+                    [4, 5], [5, 6], [6, 7], [7, 4],  # top face
+                    [0, 4], [1, 5], [2, 6], [3, 7],  # vertical edges
+                ]
+
+                # Add edges as lines
+                for edge in edges:
+                    v1, v2 = vertices[edge[0]], vertices[edge[1]]
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=[v1[0], v2[0]],
+                            y=[v1[1], v2[1]],
+                            z=[v1[2], v2[2]],
+                            mode='lines',
+                            line=dict(color='lightblue', width=4),
+                            showlegend=False,
+                            hoverinfo='skip',
+                        )
                     )
-                )
 
                 fig.add_trace(
                     go.Scatter3d(
@@ -870,12 +879,12 @@ class CustomEvalCallback(EvalCallback):
                             # Create sphere mesh
                             u = np.linspace(0, 2 * np.pi, 20)
                             v = np.linspace(0, np.pi, 20)
-                            box_x = radius * np.outer(np.cos(u), np.sin(v)) + pos[0]
+                            x = radius * np.outer(np.cos(u), np.sin(v)) + pos[0]
                             y = radius * np.outer(np.sin(u), np.sin(v)) + pos[1]
                             z = radius * np.outer(np.ones(np.size(u)), np.cos(v)) + pos[2]
                             
                             fig.add_trace(go.Surface(
-                                x=box_x, y=y, z=z,
+                                x=x, y=y, z=z,
                                 opacity=0.5,
                                 colorscale=[[0, 'red'], [1, 'red']],
                                 showscale=False,
@@ -925,12 +934,12 @@ class CustomEvalCallback(EvalCallback):
                             theta = np.linspace(0, 2*np.pi, 30)
                             z_cyl = np.linspace(-height/2, height/2, 20)
                             theta_grid, z_grid = np.meshgrid(theta, z_cyl)
-                            box_x = radius * np.cos(theta_grid) + pos[0]
+                            x = radius * np.cos(theta_grid) + pos[0]
                             y = radius * np.sin(theta_grid) + pos[1]
                             z = z_grid + pos[2]
                             
                             fig.add_trace(go.Surface(
-                                x=box_x, y=y, z=z,
+                                x=x, y=y, z=z,
                                 opacity=0.5,
                                 colorscale=[[0, 'red'], [1, 'red']],
                                 showscale=False,
@@ -941,15 +950,15 @@ class CustomEvalCallback(EvalCallback):
 
                 # update layout
                 fig.update_layout(
-                    title=f"UAV Trajectory (Reward: {reward:.2f}, Success: {success}, Targets reached: {targets_reached})",
+                    title=f"UAV Trajectory (Reward: {reward:.2f}, Success: {success}, Collision: {collision} Targets reached: {targets_reached})",
                     scene=dict(
                         xaxis_title="X Position (m)",
                         yaxis_title="Y Position (m)",
                         zaxis_title="Z Position (m)",
-                        aspectmode="cube",
-                        xaxis=dict(range=[-6, 6]),
-                        yaxis=dict(range=[-6, 6]),
-                        zaxis=dict(range=[0, 6]),
+                        aspectmode="data",
+                        xaxis=dict(range=[x_min, x_max]),
+                        yaxis=dict(range=[y_min, y_max]),
+                        zaxis=dict(range=[z_min, z_max]),
                     ),
                     legend=dict(
                         x=0.02,

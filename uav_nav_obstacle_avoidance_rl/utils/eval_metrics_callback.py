@@ -1,4 +1,3 @@
-import random
 from typing import Dict, Optional
 
 import numpy as np
@@ -9,237 +8,9 @@ from plotly.subplots import make_subplots
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 
-from uav_nav_obstacle_avoidance_rl.config import logger
+from uav_nav_obstacle_avoidance_rl import config
 
-
-class TrainMetricsCallback(BaseCallback):
-    """
-    W&B callback that logs custom UAV metrics and standard SB3 metrics
-    """
-
-    def __init__(
-        self,
-        run_path: Optional[str] = None,
-        model_save_path: Optional[str] = None,
-        model_save_freq: int = 0,
-        verbose: int = 0,
-    ):
-        # Those variables will be accessible in the callback
-        # (they are defined in the base class)
-        # The RL model
-        # self.model = None  # type: BaseAlgorithm
-        # An alias for self.model.get_env(), the environment used for training
-        # self.training_env # type: VecEnv
-        # Number of time the callback was called
-        # self.n_calls = 0  # type: int
-        # num_timesteps = n_envs * n times env.step() was called
-        # self.num_timesteps = 0  # type: int
-        # local and global variables
-        # self.locals = {}  # type: Dict[str, Any]
-        # self.globals = {}  # type: Dict[str, Any]
-        # The logger object, used to report things in the terminal
-        # self.logger # type: stable_baselines3.common.logger.Logger
-        # Sometimes, for event callback, it is useful
-        # to have access to the parent object
-        # self.parent = None  # type: Optional[BaseCallback]
-        super().__init__(verbose)
-        self.model_save_path = model_save_path
-        self.model_save_freq = model_save_freq
-        self.run_path = run_path
-
-        # storage for whole train-run metrics
-        self.train_run_metrics = {
-            "success": [],
-            "collision": [],
-            "out_of_bounds": [],
-        }
-
-        # current episode tracking
-        self.current_episode_data = {}
-
-    def _on_training_start(self) -> None:
-        """called at the start of training"""
-        if self.verbose >= 1:
-            print("Starting W&B UAV metrics collection...")
-
-        # init episode tracking for each env
-        n_envs = self.training_env.num_envs
-        for i in range(n_envs):
-            self._reset_current_episode(i)
-
-    def _reset_current_episode(self, env_idx: int):
-        """reset tracking for the next episode"""
-        self.current_episode_data[env_idx] = {
-            "positions": [],
-            "velocities": [],
-            "start_position": None,
-            "target_position": None,
-            "start_time": self.num_timesteps,
-        }
-
-    def _on_step(self) -> bool:
-        """called after each environment step"""
-        try:
-            # extract step information
-            done = self.locals["dones"]
-            info = self.locals["infos"]  # collected by the Monitor wrapper
-
-            # identify env
-            if hasattr(self.training_env, "envs"):
-                envs = self.training_env.envs
-            else:
-                envs = [self.training_env]
-
-            for env_idx, env in enumerate(envs):
-                # find the underlying UAV environment - peel wrappers to find the VectorVoyagerEnv
-                underlying_env = env
-                while hasattr(underlying_env, "env"):
-                    if hasattr(underlying_env, "waypoints") and hasattr(
-                        underlying_env, "compute_attitude"
-                    ):  # if base env has been found then stop peeling
-                        break
-                    underlying_env = underlying_env.env
-
-                state = underlying_env.env.state(0)
-                lin_pos = state[3]  # [x, y, z] position
-                lin_vel = state[2]  # [u, v, w] velocity
-
-                self.current_episode_data[env_idx]["positions"].append(lin_pos.copy())
-                self.current_episode_data[env_idx]["velocities"].append(lin_vel.copy())
-
-                # set start position if first step
-                if self.current_episode_data[env_idx]["start_position"] is None:
-                    self.current_episode_data[env_idx]["start_position"] = (
-                        lin_pos.copy()
-                    )
-
-                # get target position
-                self.current_episode_data[env_idx]["target_position"] = (
-                    underlying_env.waypoints.targets[0].copy()
-                )  # NOTE adjust to multiple waypoints
-
-            # process completed episode
-            for env_idx, (done, info) in enumerate(zip(done, info)):
-                if done:
-                    self._process_completed_episode(info, env_idx)
-
-        except Exception as e:
-            logger.exception(f"Error in TrainMetrics collection step: {env_idx}: {e}")
-
-        return True
-
-    def _process_completed_episode(self, info: Dict, env_idx: int = 0):
-        """
-        process a completed episode and log metrics to W&B
-        - episode_info keys=['out_of_bounds', 'collision', 'env_complete', 'num_targets_reached', 'TimeLimit.truncated', 'episode']
-        - 'episode' is dic and contains logged info from the Monitor wrapper: r, l, t by default, plus any additional logged information (in this case)
-        """
-        try:
-            # extract episode results from Monitor wrapper
-            out_of_bounds = info["out_of_bounds"]
-            collision = info["collision"]
-            env_complete = info["env_complete"]
-            targets_reached = info["num_targets_reached"]
-            episode_reward = info["episode"]["r"]
-            episode_length = info["episode"]["l"]
-
-            # check for success = all targets reached, without collisions
-            success = env_complete and not collision and not out_of_bounds
-
-            # calculate custom metrics
-            path_length = self._calculate_path_length(
-                self.current_episode_data[env_idx]["positions"]
-            )
-            mean_velocity = self._calculate_average_velocity(
-                self.current_episode_data[env_idx]["velocities"]
-            )
-            # calculate path efficiency only on successful episodes where the target is reached
-            if success:
-                # calculate path efficiency only on successful episodes where the target is reached
-                path_efficiency = self._calculate_path_efficiency(
-                    self.current_episode_data[env_idx]["start_position"],
-                    self.current_episode_data[env_idx]["target_position"],
-                    path_length,
-                )
-            else:
-                # unsuccessful episodes (for consistent array length in self.episode_history)
-                path_efficiency = 0.0
-
-            # store in run-level episode history
-            self.train_run_metrics["success"].append(int(success))
-            self.train_run_metrics["collision"].append(int(collision))
-            self.train_run_metrics["out_of_bounds"].append(int(out_of_bounds))
-
-            # calculate performance ratios using run-level storage
-            success_rate = np.mean(self.train_run_metrics["success"][-20:])
-            collision_rate = np.mean(self.train_run_metrics["collision"][-20:])
-            out_of_bounds_rate = np.mean(self.train_run_metrics["out_of_bounds"][-20:])
-
-            # log metrics to W&B
-            episode_metrics = {
-                # performance ratios
-                "train_uav/success_rate_rolling_20ep": success_rate,
-                "train_uav/collision_rate_rolling_20ep": collision_rate,
-                "train_uav/out_of_bounds_rate_rolling_20ep": out_of_bounds_rate,
-                "train_uav/targets_reached": targets_reached,
-                # movement metrics
-                "train_uav/mean_velocity": mean_velocity,
-                "train_uav/path_length": path_length,
-                "train_uav/path_efficiency": path_efficiency,
-                # episode basics
-                "train_uav/episode_reward": episode_reward,
-                "train_uav/episode_length": episode_length,
-            }
-
-            wandb.log(episode_metrics, step=self.num_timesteps)
-
-            # reset episode tracking
-            self._reset_current_episode(env_idx)
-
-        except Exception as e:
-            logger.exception(f"Error processing episode metrics: {e}")
-
-    def _calculate_path_length(self, positions) -> float:
-        """calculate total distance traveled"""
-        if len(positions) < 2:
-            return 0.0
-        positions = np.array(positions)
-        distances = np.linalg.norm(
-            np.diff(positions, axis=0), axis=1
-        )  # calc. difference between postions -> calc. norm (distance) of difference -> sum all distances between positions -> complete length of traveled path
-        return float(np.sum(distances))
-
-    def _calculate_average_velocity(self, velocities) -> float:
-        """Calculate average velocity magnitude"""
-        if len(velocities) == 0:
-            return 0.0
-        velocities = np.array(velocities)
-        velocity_magnitudes = np.linalg.norm(velocities, axis=1)
-        return float(np.mean(velocity_magnitudes))
-
-    def _calculate_path_efficiency(
-        self, start_position, target_position, path_length: float
-    ) -> float:
-        # direct distance to target
-        direct_distance = np.linalg.norm(
-            target_position - start_position
-        )  # NOTE adjust this for multiple waypoint targets
-        if direct_distance == 0:
-            return 0.0
-
-        return path_length / direct_distance  # efficiency ratio
-
-    def _on_training_end(self) -> None:
-        """called at the end of training"""
-        # save final model if path specified
-        if self.model_save_path:
-            model_path = f"{self.model_save_path}/final_model.zip"
-            self.model.save(model_path)
-
-            # save as W&B artifact
-            artifact = wandb.Artifact("final_model", type="model")
-            artifact.add_file(model_path)
-            wandb.log_artifact(artifact)
+logger = config.logger
 
 
 class CustomEvalCallback(EvalCallback):
@@ -255,10 +26,22 @@ class CustomEvalCallback(EvalCallback):
         # initialize parent with remaining kwargs
         super().__init__(*args, **kwargs)
 
+        self.rng = np.random.default_rng(config.RANDOM_SEED)
+
+        # store reference to underlying env (unwrap), vectorvoyager
+        if hasattr(self.eval_env, "envs"):
+            self.underlying_env = self.eval_env.envs[0].unwrapped
+        else:
+            self.underlying_env = self.eval_env.unwrapped
+
         self.current_episode_data = {}
 
     def _on_step(self) -> bool:
-        """override the parent _on_step to use our custom callback"""
+        """
+        override the parent _on_step to use our custom callback
+        this is actually not called in every step but only on the last step of the training cycle, just before the evaluation starts.
+        the actual evaluation with evaluate_policy() is calling _log_eval_callback() on each step.
+        """
         continue_training = True
 
         if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0:
@@ -281,13 +64,14 @@ class CustomEvalCallback(EvalCallback):
                 "collision": [],
                 "out_of_bounds": [],
                 "env_complete": [],
+                "num_targets": [],
                 "targets_reached": [],
                 "episode_rewards": [],
                 "episode_lengths": [],
                 "mean_velocities": [],
                 "path_lengths": [],
                 "path_efficiencies": [],
-                "num_spawned_obs": [],
+                "num_obstacles": [],
                 "positions_history": [],  # for trajectory plotting (nested array)
                 "velocities_history": [],  # for trajectory plotting (nested array)
                 "target_position_history": [],  # for trajectory plotting (nested array)
@@ -295,6 +79,7 @@ class CustomEvalCallback(EvalCallback):
             }
             self._is_success_buffer = []
 
+            # START EVALUATION
             episode_rewards, episode_lengths = evaluate_policy(
                 self.model,
                 self.eval_env,
@@ -303,7 +88,7 @@ class CustomEvalCallback(EvalCallback):
                 deterministic=self.deterministic,
                 return_episode_rewards=True,
                 warn=self.warn,
-                callback=self._log_eval_callback,
+                callback=self._log_eval_callback,  # evaluate_policy itself calls the callback function and passes locals() and globals() to it
             )
 
             # log detailed eval metrics to W&B
@@ -388,23 +173,7 @@ class CustomEvalCallback(EvalCallback):
             if not self.current_episode_data:
                 self._reset_current_episode()
 
-            # identify env
-            if hasattr(self.eval_env, "envs"):
-                env = self.eval_env.envs[0]
-            else:
-                env = self.eval_env
-
-            # find the underlying UAV environment - peel wrappers to find the VectorVoyagerEnv
-            underlying_env = env
-            while hasattr(underlying_env, "env"):
-                if hasattr(underlying_env, "waypoints") and hasattr(
-                    underlying_env, "compute_attitude"
-                ):  # if base env has been found then stop peeling
-                    # underlying_env = underlying_env.env
-                    break
-                underlying_env = underlying_env.env
-
-            state = underlying_env.env.state(0)  # capture state from Aviary env
+            state = self.underlying_env.env.state(0)  # capture state from Aviary env
             lin_pos = state[3]  # [x, y, z] position
             lin_vel = state[2]  # [u, v, w] velocity
 
@@ -417,15 +186,15 @@ class CustomEvalCallback(EvalCallback):
                 self.current_episode_data["start_position"] = lin_pos.copy()
 
                 # -> capture obstacle info
-                if hasattr(underlying_env, 'obstacle_ids') and underlying_env.obstacle_ids:
+                if hasattr(self.underlying_env, 'obstacles') and self.underlying_env.obstacles:
                     obstacles_data = []
-                    for obs_id in underlying_env.obstacle_ids:
+                    for obs_id in self.underlying_env.obstacles:
                         try:
                             # capture obstacle position and orientation
-                            pos, orn = underlying_env.env.getBasePositionAndOrientation(obs_id)
+                            pos, orn = self.underlying_env.env.getBasePositionAndOrientation(obs_id)
                             
                             # capture collision shape data
-                            collision_shape_info = underlying_env.env.getCollisionShapeData(obs_id, -1)
+                            collision_shape_info = self.underlying_env.env.getCollisionShapeData(obs_id, -1)
 
                             if collision_shape_info:
                                 shape_info = collision_shape_info[0]  # first (and usually only) collision shape
@@ -433,9 +202,9 @@ class CustomEvalCallback(EvalCallback):
                                     'id': obs_id,
                                     'position': np.array(pos),
                                     'orientation': np.array(orn),
-                                    'shape_type': shape_info[2],  # geometry type
-                                    'dimensions': np.array(shape_info[3]),  # dimensions
-                                    'local_frame_pos': np.array(shape_info[5]),  # local position
+                                    'shape_type': shape_info[2],  # geometry type (GEOM_SPHERE=2, GEOM_BOX=3, GEOM_CYLINDER=4)
+                                    'dimensions': np.array(shape_info[3]),  # dimensions  (radius for sphere, half-extents for box, [height, radius] for cylinder)
+                                    'local_frame_pos': np.array(shape_info[5]),  # local position  (local position relative to center of mass)
                                     'local_frame_orn': np.array(shape_info[6]),  # local orientation
                                 })
                         except Exception as obs_error:
@@ -447,13 +216,13 @@ class CustomEvalCallback(EvalCallback):
                     self.current_episode_data["obstacles"] = obstacles_data
                 else:
                     # No obstacles in this episode
-                    self.current_episode_data["obstacles"] = []
+                    self.current_episode_data["obstacles"] = ["empty"]
 
             # at episode start ->
             if self.current_episode_data["target_position"] is None:
                 # -> capture target position
                 self.current_episode_data["target_position"] = (
-                    underlying_env.waypoints.targets[0].copy()
+                    self.underlying_env.waypoints.targets[0].copy()
                 )  # TODO adjust to multiple waypoints
 
             # process completed episodes
@@ -511,9 +280,6 @@ class CustomEvalCallback(EvalCallback):
             else:
                 # unsuccessful episodes (for consistent array length in self.episode_history)
                 path_efficiency = 0.0
-            
-            # capture number of spawned obstacle in episode
-            num_spawned_obs = len(self.current_episode_data["obstacles"])
 
             ## STORE METRICS
             # store in evaluation-cycle-level episode history
@@ -522,13 +288,14 @@ class CustomEvalCallback(EvalCallback):
             self.current_eval_cycle_data["out_of_bounds"].append(int(out_of_bounds))
             self.current_eval_cycle_data["env_complete"].append(int(env_complete))
             self.current_eval_cycle_data["targets_reached"].append(targets_reached)
+            self.current_eval_cycle_data["num_targets"].append(len(self.current_episode_data["target_position"]))
             self.current_eval_cycle_data["episode_rewards"].append(episode_reward)
             self.current_eval_cycle_data["episode_lengths"].append(episode_length)
+            self.current_eval_cycle_data["num_obstacles"].append(info["num_obstacles"])
 
             self.current_eval_cycle_data["mean_velocities"].append(mean_velocity)
             self.current_eval_cycle_data["path_lengths"].append(path_length)
             self.current_eval_cycle_data["path_efficiencies"].append(path_efficiency)
-            self.current_eval_cycle_data["num_spawned_obs"].append(num_spawned_obs)
 
             self.current_eval_cycle_data["positions_history"].append(
                 np.array(self.current_episode_data["positions"]).copy()
@@ -578,7 +345,7 @@ class CustomEvalCallback(EvalCallback):
         return path_length / direct_distance
 
     def _log_after_evaluation(self):
-        """log detailed evaluation metrics to W&B"""
+        """log detailed metrics of a completed evaluation-round to W&B"""
         # calculate aggregate metrics
         eval_metrics = {
             "eval_uav/success_rate": np.mean(
@@ -596,7 +363,7 @@ class CustomEvalCallback(EvalCallback):
             "eval_uav/targets_reached_mean": np.mean(
                 self.current_eval_cycle_data["targets_reached"]
             ),
-            "eval_uav/mean_velocity_mean": np.mean(
+            "eval_uav/avg_velocity_mean": np.mean(
                 self.current_eval_cycle_data["mean_velocities"]
             ),
             "eval_uav/path_length_mean": np.mean(
@@ -989,33 +756,21 @@ class CustomEvalCallback(EvalCallback):
     def _log_trajectory_plot(self):
         """Create and log evaluation trajectory plot for an episode"""
         try:
+            # pick 3 random episodes
             episodes = self.current_eval_cycle_data["success"]
-            picked_episodes = random.sample(
-                range(len(episodes)), min(1, len(episodes))
-            )  # pick 3 episode
+            picked_episodes = self.rng.choice(len(episodes), size=3, replace=False).tolist()
 
             for idx, ep_idx in enumerate(picked_episodes):
-                positions = self.current_eval_cycle_data[
-                    "positions_history"
-                ][
-                    ep_idx
-                ][
-                    :-1
-                ]  # take one position less ([:-1]), so that the trajectory is a oneway and not a closed loop
+                positions = self.current_eval_cycle_data["positions_history"][ep_idx][:-1]  # take one position less ([:-1]), so that the trajectory is a oneway and not a closed loop
                 if len(positions) < 2:
                     return
 
-                velocities = self.current_eval_cycle_data["velocities_history"][ep_idx][
-                    :-1
-                ]
+                velocities = self.current_eval_cycle_data["velocities_history"][ep_idx][:-1]
                 reward = self.current_eval_cycle_data["episode_rewards"][ep_idx]
                 success = self.current_eval_cycle_data["success"][ep_idx]
-                target_position = self.current_eval_cycle_data[
-                    "target_position_history"
-                ][ep_idx]
-                targets_reached = self.current_eval_cycle_data["targets_reached"][
-                    ep_idx
-                ]
+                collision = self.current_eval_cycle_data["collision"][ep_idx]
+                target_position = self.current_eval_cycle_data["target_position_history"][ep_idx]
+                targets_reached = self.current_eval_cycle_data["targets_reached"][ep_idx]
 
                 # Calculate speed magnitudes
                 speed_magnitudes = np.linalg.norm(velocities, axis=1)
@@ -1023,27 +778,39 @@ class CustomEvalCallback(EvalCallback):
                 # Create 3D trajectory plot
                 fig = go.Figure()
 
-                # Add semitransparent dome (hemisphere) with radius 5
-                dome_radius = 5.0
-                u = np.linspace(0, 2 * np.pi, 50)
-                v = np.linspace(0, np.pi / 2, 25)  # Only upper hemisphere (0 to π/2)
+                # Add wireframe box representing the flight space boundaries
+                # Get boundaries from voxel grid
+                x_min, x_max = self.underlying_env.voxel_grid.x_min, self.underlying_env.voxel_grid.x_max
+                y_min, y_max = self.underlying_env.voxel_grid.y_min, self.underlying_env.voxel_grid.y_max
+                z_min, z_max = self.underlying_env.voxel_grid.z_min, self.underlying_env.voxel_grid.z_max
 
-                dome_x = dome_radius * np.outer(np.cos(u), np.sin(v))
-                dome_y = dome_radius * np.outer(np.sin(u), np.sin(v))
-                dome_z = dome_radius * np.outer(np.ones(np.size(u)), np.cos(v))
+                # Define the 8 vertices of the box
+                vertices = np.array([
+                    [x_min, y_min, z_min], [x_max, y_min, z_min], [x_max, y_max, z_min], [x_min, y_max, z_min],
+                    [x_min, y_min, z_max], [x_max, y_min, z_max], [x_max, y_max, z_max], [x_min, y_max, z_max]
+                ])
 
-                fig.add_trace(
-                    go.Surface(
-                        x=dome_x,
-                        y=dome_y,
-                        z=dome_z,
-                        opacity=0.2,
-                        colorscale=[[0, "lightblue"], [1, "lightblue"]],
-                        showscale=False,
-                        name="Flight Dome",
-                        hovertemplate="Flight Boundary<extra></extra>",
+                # Define the 12 edges of the box (pairs of vertex indices)
+                edges = [
+                    [0, 1], [1, 2], [2, 3], [3, 0],  # bottom face
+                    [4, 5], [5, 6], [6, 7], [7, 4],  # top face
+                    [0, 4], [1, 5], [2, 6], [3, 7],  # vertical edges
+                ]
+
+                # Add edges as lines
+                for edge in edges:
+                    v1, v2 = vertices[edge[0]], vertices[edge[1]]
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=[v1[0], v2[0]],
+                            y=[v1[1], v2[1]],
+                            z=[v1[2], v2[2]],
+                            mode='lines',
+                            line=dict(color='lightblue', width=4),
+                            showlegend=False,
+                            hoverinfo='skip',
+                        )
                     )
-                )
 
                 fig.add_trace(
                     go.Scatter3d(
@@ -1183,15 +950,15 @@ class CustomEvalCallback(EvalCallback):
 
                 # update layout
                 fig.update_layout(
-                    title=f"UAV Trajectory (Reward: {reward:.2f}, Success: {success}, Targets reached: {targets_reached})",
+                    title=f"UAV Trajectory (Reward: {reward:.2f}, Success: {success}, Collision: {collision} Targets reached: {targets_reached})",
                     scene=dict(
                         xaxis_title="X Position (m)",
                         yaxis_title="Y Position (m)",
                         zaxis_title="Z Position (m)",
-                        aspectmode="cube",
-                        xaxis=dict(range=[-6, 6]),
-                        yaxis=dict(range=[-6, 6]),
-                        zaxis=dict(range=[0, 6]),
+                        aspectmode="data",
+                        xaxis=dict(range=[x_min, x_max]),
+                        yaxis=dict(range=[y_min, y_max]),
+                        zaxis=dict(range=[z_min, z_max]),
                     ),
                     legend=dict(
                         x=0.02,

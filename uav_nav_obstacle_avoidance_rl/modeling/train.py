@@ -1,6 +1,8 @@
+from tabnanny import verbose
 import time
 
 import typer
+from typing import Any, Literal, Tuple, Dict
 import wandb
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
@@ -17,6 +19,7 @@ app = typer.Typer()
 
 @app.command()
 def run_exp(
+    ### Experiment parameters ###
     exp_name: str = f"run_{int(time.time())}",
     timesteps: int = 15_000,
     eval_freq: int = 5_000,
@@ -24,20 +27,46 @@ def run_exp(
     exp_analysis: bool = True,
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     wandb_tags: list[str] | None = None,
-    
-    # Environment parameters
+
+    ### Environment parameters ###
+    # boundary parameters
+    grid_sizes: tuple[float, float, float] = (10.0, 10.0, 5.0),  # (x, y, z)
+    voxel_size: float = 1.0,
+    min_height: float = 0.0,  # default: 0.1,  min allowed hight, collision is detected if below that height
+
+    # waypoint parameters
     num_targets: int = 1,
-    flight_dome_size: float = 5.0,
-    max_duration_seconds: float = 80.0,
-    enable_obstacles: bool = True,
-    visual_obstacles: bool = True,
-    num_obstacles: tuple[int, int] = (0, 3),
-    obstacle_types: list[str] = ["sphere", "box", "cylinder"],
-    obstacle_size_range: tuple[float, float] = (0.1, 0.8),
-    obstacle_min_distance_from_start: float = 1.0,
-    obstacle_hight_range: tuple[float, float] = (0.1, 5.0),
-    
-    # PPO hyperparameters
+    sparse_reward: bool = False,
+    use_yaw_targets: bool = False,  # toggles whether the agent must also align its yaw (heading) to a per‐waypoint target before that waypoint is considered "reached," and whether yaw error is included in the observation.
+    goal_reach_distance: float = 0.2,  # distance within which the target is considered reached
+    goal_reach_angle: float = 0.1,  # not in use since use_yaw_targets is not in use
+
+    # obstacle parameters
+    obstacle_strategy: str = "random",  # "random",
+    num_obstacles: int = 6,
+    visual_obstacles: bool = False,  # only for evaluation
+
+    # observation parameters
+    perception_mode: Literal["none", "lidar"] = "lidar",
+    num_rays_horizontal: int = 36,
+    num_rays_vertical: int = 1,
+    max_range: float = 10.0,
+    min_range: float = 0.1,
+    fov_horizontal: float = 360.0,
+    fov_vertical: float = 30.0,
+    ray_start_offset: float = 0.15,
+    normalize_distances: bool = True,
+    add_to_obs: Literal["append", "separate", "replace"] = "separate",
+
+    # simulation parameters
+    max_duration_seconds: float = 80.0,  # max simulation time of the env
+    flight_mode: int = 5,  # uav constrol mode 5: (u, v, vr, vz) -> u: local velocity forward in m/s, v: lateral velocity in m/s, vr: yaw in rad/s, vz: vertical velocity in m/s
+    angle_representation: str = "quaternion",
+    agent_hz: int = 30,  # looprate of the agent to environment interaction
+    render_mode: str | None = None,
+    render_resolution: tuple[int, int] = (480, 480),
+
+    ### PPO hyperparameters ###
     learning_rate: float = 3e-4,
     batch_size: int = 64,
     n_steps: int = 2048,
@@ -55,7 +84,7 @@ def run_exp(
     # calculate eval frequency based on parallel environments -> eval_freq = actual time-steps
     eval_freq = eval_freq // n_envs
 
-    # Prepare configuration for tracking
+    # Prepare configuration for w&b tracking
     config_dict = {
         "algorithm": "PPO",
         "total_timesteps": timesteps,
@@ -63,15 +92,12 @@ def run_exp(
         "n_envs": n_envs,
         # Environment params
         "num_targets": num_targets,
-        "flight_dome_size": flight_dome_size,
+        "grid_sizes": grid_sizes,
+        "voxel_size": voxel_size,
         "max_duration_seconds": max_duration_seconds,
-        "enable_obstacles": enable_obstacles,
         "visual_obstacles": visual_obstacles,
         "num_obstacles": num_obstacles,
-        "obstacle_types": obstacle_types,
-        "obstacle_size_range": obstacle_size_range,
-        "obstacle_min_distance_from_start": obstacle_min_distance_from_start,
-        "obstacle_hight_range": obstacle_hight_range,
+        "obstacle_strategy": obstacle_strategy,
         # PPO hyperparameters
         "learning_rate": learning_rate,
         "batch_size": batch_size,
@@ -88,25 +114,52 @@ def run_exp(
         project=wandb_project,
         name=exp_name,
         config=config_dict,
-        tags=wandb_tags or ["training_and_eval", f"dome_{flight_dome_size}m"],
+        tags=wandb_tags or ["training_and_eval", f"grid_space_{grid_sizes}m"],
         dir=config.REPORTS_DIR.as_posix(),
         sync_tensorboard=False,  # auto-upload tensorboard metrics
         monitor_gym=True,  # auto-upload videos
         save_code=True,  # save code for reproducibility
     )
 
+    monitored_info = dict(
+            info_keywords=(
+                "out_of_bounds",
+                "collision",
+                "env_complete",
+                "num_targets_reached",
+                "num_obstacles",
+                )
+            )
+    
     # train environment configuration
     env_kwargs_train = {
         "num_targets": num_targets,
-        "flight_dome_size": flight_dome_size,
+        "grid_sizes": grid_sizes,
+        "voxel_size": voxel_size,
+        "min_height": min_height,
+        "sparse_reward": sparse_reward,
+        "use_yaw_targets": use_yaw_targets,
+        "goal_reach_distance": goal_reach_distance,
+        "goal_reach_angle": goal_reach_angle,
         "max_duration_seconds": max_duration_seconds,
-        "enable_obstacles": enable_obstacles,
         "visual_obstacles": False,
         "num_obstacles": num_obstacles,
-        "obstacle_types": obstacle_types,
-        "obstacle_size_range": obstacle_size_range,
-        "obstacle_min_distance_from_start": obstacle_min_distance_from_start,
-        "obstacle_hight_range": obstacle_hight_range,
+        "obstacle_strategy": obstacle_strategy,
+        "flight_mode": flight_mode,
+        "angle_representation": angle_representation,
+        "agent_hz": agent_hz,
+        "render_mode": render_mode,
+        "render_resolution": render_resolution,
+        "perception_mode": perception_mode,
+        "num_rays_horizontal": num_rays_horizontal,
+        "num_rays_vertical": num_rays_vertical,
+        "max_range": max_range,
+        "min_range": min_range,
+        "fov_horizontal": fov_horizontal,
+        "fov_vertical": fov_vertical,
+        "ray_start_offset": ray_start_offset,
+        "normalize_distances": normalize_distances,
+        "add_to_obs": add_to_obs,
     }
 
     # create training environment
@@ -114,29 +167,38 @@ def run_exp(
         env_helpers.make_flat_voyager,
         n_envs=n_envs,
         env_kwargs=env_kwargs_train,
-        monitor_kwargs=dict(
-            info_keywords=(
-                "out_of_bounds",
-                "collision",
-                "env_complete",
-                "num_targets_reached",
-                "num_obstacles_spawned",
-            )
-        ),
-    )
+        monitor_kwargs=monitored_info,
+        )
 
     # separate eval environment configuration
     env_kwargs_val = {
         "num_targets": num_targets,
-        "flight_dome_size": flight_dome_size,
+        "grid_sizes": grid_sizes,
+        "voxel_size": voxel_size,
+        "min_height": min_height,
+        "sparse_reward": sparse_reward,
+        "use_yaw_targets": use_yaw_targets,
+        "goal_reach_distance": goal_reach_distance,
+        "goal_reach_angle": goal_reach_angle,
         "max_duration_seconds": max_duration_seconds,
-        "enable_obstacles": enable_obstacles,
         "visual_obstacles": visual_obstacles,
         "num_obstacles": num_obstacles,
-        "obstacle_types": obstacle_types,
-        "obstacle_size_range": obstacle_size_range,
-        "obstacle_min_distance_from_start":obstacle_min_distance_from_start,
-        "obstacle_hight_range": obstacle_hight_range,
+        "obstacle_strategy": obstacle_strategy,
+        "flight_mode": flight_mode,
+        "angle_representation": angle_representation,
+        "agent_hz": agent_hz,
+        "render_mode": render_mode,
+        "render_resolution": render_resolution,
+        "perception_mode": perception_mode,
+        "num_rays_horizontal": num_rays_horizontal,
+        "num_rays_vertical": num_rays_vertical,
+        "max_range": max_range,
+        "min_range": min_range,
+        "fov_horizontal": fov_horizontal,
+        "fov_vertical": fov_vertical,
+        "ray_start_offset": ray_start_offset,
+        "normalize_distances": normalize_distances,
+        "add_to_obs": add_to_obs,
     }
 
     # separete evaluation environment
@@ -144,15 +206,7 @@ def run_exp(
         env_helpers.make_flat_voyager,
         n_envs=1,  # single env for evaluation - simple and clean
         env_kwargs=env_kwargs_val,
-        monitor_kwargs=dict(
-            info_keywords=(
-                "out_of_bounds",
-                "collision",
-                "env_complete",
-                "num_targets_reached",
-                "num_obstacles_spawned",
-            )
-        ),
+        monitor_kwargs=monitored_info,
     )
 
     # analyze environment
@@ -185,6 +239,7 @@ def run_exp(
         n_eval_episodes=20,
         deterministic=True,
         render=False,
+        verbose=2,
         exp_analysis=exp_analysis,
     )
     callbacks.append(eval_callback)
@@ -201,7 +256,7 @@ def run_exp(
         clip_range=clip_range,
         ent_coef=ent_coef,
         vf_coef=vf_coef,
-        verbose=0,
+        verbose=2,
         tensorboard_log=f"{wandb_run.dir}/tensorboard",
         seed=config.RANDOM_SEED,  # the seed is passed through the chain: (PPO → Gymnasium → QuadXBaseEnv → Aviary → VectorVoyagerEnv → VoxelGrid)
     )
@@ -250,7 +305,7 @@ def sweep():
                 learning_rate=config.learning_rate,
                 batch_size=config.batch_size,
                 gamma=config.gamma,
-                flight_dome_size=config.flight_dome_size,
+                grid_sizes=(10.0, 10.0, 5.0),
                 n_steps=config.n_steps,
                 exp_analysis=False,  # W&B handles plotting
             )

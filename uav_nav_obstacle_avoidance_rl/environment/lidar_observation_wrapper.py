@@ -289,43 +289,43 @@ class LidarObservationWrapper(gym.ObservationWrapper):
                 lifeTime=duration,
             )
 
-    class LidarFlattenWrapper(gym.ObservationWrapper):
-        """
-        flatten dict observations with LIDAR into a single vector
-        """
+class LidarFlattenWrapper(gym.ObservationWrapper):
+    """
+    flatten dict observations with LIDAR into a single vector
+    """
 
-        def __init__(self, env: gym.Env, context_length: int = 1):
-            super().__init__(env)
+    def __init__(self, env: gym.Env, context_length: int = 1):
+        super().__init__(env)
 
-            self.context_length = context_length
+        self.context_length = context_length
 
-            # calculate observation size
-            attitude_size = env.observation_space["attitude"].shape[0]
-            lidar_size = env.observation_space["lidar"].shape[0]
-            target_size = env.observation_space["target_deltas"].feature_space.shape[0]
+        # calculate observation size
+        attitude_size = env.observation_space["attitude"].shape[0]
+        lidar_size = env.observation_space["lidar"].shape[0]
+        target_size = env.observation_space["target_deltas"].feature_space.shape[0]
 
-            total_size = attitude_size + lidar_size + target_size context_length
+        total_size = attitude_size + lidar_size + target_size + context_length
 
-            self.observation_space = spaces.Box(
-                low=np.inf,
-                high=np.inf,
-                shape=(total_size),
-                dtype=np.float32,
-            )
+        self.observation_space = spaces.Box(
+            low=np.inf,
+            high=np.inf,
+            shape=(total_size),
+            dtype=np.float32,
+        )
 
-            self._attitude_size = attitude_size
-            self._lidar_size = lidar_size
-            self._target_size = target_size
+        self._attitude_size = attitude_size
+        self._lidar_size = lidar_size
+        self._target_size = target_size
 
-        def observation(self, observation: Dict):
-            """flatten observation dict to vector"""
-            # handle target deltas (pad if fewer than context_length)
-            num_targets = min(self.context_length, observation["target_deltas"].shape[0])
-            targets = np.zeros((self.context_length, self._target_size), dtype=np.float32)
-            targets[:num_targets] = observation["target_deltas"][:num_targets]
+    def observation(self, observation: Dict):
+        """flatten observation dict to vector"""
+        # handle target deltas (pad if fewer than context_length)
+        num_targets = min(self.context_length, observation["target_deltas"].shape[0])
+        targets = np.zeros((self.context_length, self._target_size), dtype=np.float32)
+        targets[:num_targets] = observation["target_deltas"][:num_targets]
 
-            return np.concatenate([
-                observation["attitude"],
-                observation["lidar"],
-                targets.flatten(),
-            ]).astype(np.float32)
+        return np.concatenate([
+            observation["attitude"],
+            observation["lidar"],
+            targets.flatten(),
+        ]).astype(np.float32)

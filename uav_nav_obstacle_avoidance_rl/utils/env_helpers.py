@@ -24,14 +24,27 @@ def make_flat_voyager(**env_kwargs):
     """
     # extract num_targets from env_kwargs
     num_targets = env_kwargs.get("num_targets", 1)
-    perception_mode = env_kwargs.get("perception_mode", "none")
+
+    # extract wrapper-specific parameters (not accepted by VectorVoyagerEnv)
+    perception_mode = env_kwargs.pop("perception_mode", "none")
+    lidar_kwargs = {
+        "num_rays_horizontal": env_kwargs.pop("num_rays_horizontal", 36),
+        "num_rays_vertical": env_kwargs.pop("num_rays_vertical", 1),
+        "max_range": env_kwargs.pop("max_range", 10.0),
+        "min_range": env_kwargs.pop("min_range", 0.1),
+        "fov_horizontal": env_kwargs.pop("fov_horizontal", 360.0),
+        "fov_vertical": env_kwargs.pop("fov_vertical", 30.0),
+        "ray_start_offset": env_kwargs.pop("ray_start_offset", 0.15),
+        "normalize_distances": env_kwargs.pop("normalize_distances", True),
+        "add_to_obs": env_kwargs.pop("add_to_obs", "separate"),
+    }
 
     # create base environment
     env = VectorVoyagerEnv(**env_kwargs)
 
     # wrap with LiDAR observation
     if perception_mode == "lidar":
-        env = LidarObservationWrapper(env)
+        env = LidarObservationWrapper(env, **lidar_kwargs)
         env = LidarFlattenWrapper(env, context_length=num_targets)
     else:
         # use standard flattening wrapper

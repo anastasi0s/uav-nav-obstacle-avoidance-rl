@@ -1,4 +1,3 @@
-from sre_compile import dis
 from typing import Any, Literal, Tuple, Dict
 import math
 import numpy as np
@@ -77,7 +76,7 @@ class LidarObservationWrapper(gym.ObservationWrapper):
         else:
             # distribute rays evenly across horizontal FOV
             h_start = -self.fov_horizontal / 2
-            h_step = self.fov_horizontal / self.num_rays_horizontal  # NOTE adjust this if partial FOV is used!
+            h_step = self.fov_horizontal / self.num_rays_horizontal  # NOTE adjust this to: self.num_rays_horizontal - 1  if partial FOV is used!
             h_angles = [h_start + i * h_step for i in range(self.num_rays_horizontal)]
         
         # vertical angles (elevation)
@@ -85,9 +84,9 @@ class LidarObservationWrapper(gym.ObservationWrapper):
             v_angles = [0.0]  # single horizontal plane
         else:
             # distribute rays evenly across vertical FOV
-            v_start = -self.fov_horizontal / 2
-            h_step = self.fov_vertical / (self.num_rays_vertical - 1)
-            v_angles = [v_start + i * h_step for i in range(self.num_rays_vertical)]
+            v_start = -self.fov_vertical / 2
+            v_step = self.fov_vertical / (self.num_rays_vertical - 1)
+            v_angles = [v_start + i * v_step for i in range(self.num_rays_vertical)]
 
         # generate all ray directions
         for v_angle in v_angles:
@@ -174,11 +173,11 @@ class LidarObservationWrapper(gym.ObservationWrapper):
         position, orientation = self._get_uav_pose()
 
         # rotate ray directions to world frame
-        world_orientation = self._rotate_directions_to_world(self._ray_directions, orientation)
+        world_directions = self._rotate_directions_to_world(self._ray_directions, orientation)
 
         # compute ray start and end points
-        ray_starts = position + world_orientation + self.ray_start_offset
-        ray_ends = position + world_orientation + self.max_range
+        ray_starts = position + world_directions * self.ray_start_offset
+        ray_ends = position + world_directions * self.max_range
 
         # batch raycast (efficient)
         results = aviary.rayTestBatch(
@@ -304,12 +303,12 @@ class LidarFlattenWrapper(gym.ObservationWrapper):
         lidar_size = env.observation_space["lidar"].shape[0]
         target_size = env.observation_space["target_deltas"].feature_space.shape[0]
 
-        total_size = attitude_size + lidar_size + target_size + context_length
+        total_size = attitude_size + lidar_size + (target_size * context_length)
 
         self.observation_space = spaces.Box(
-            low=np.inf,
+            low=-np.inf,
             high=np.inf,
-            shape=(total_size),
+            shape=(total_size,),
             dtype=np.float32,
         )
 

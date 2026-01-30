@@ -1,8 +1,6 @@
-from tabnanny import verbose
 import time
 
 import typer
-from typing import Any, Literal, Tuple, Dict
 import wandb
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
@@ -10,6 +8,7 @@ from wandb.integration.sb3 import WandbCallback
 
 from uav_nav_obstacle_avoidance_rl import config
 from uav_nav_obstacle_avoidance_rl.utils import env_helpers
+from uav_nav_obstacle_avoidance_rl.test import base_env_test
 from uav_nav_obstacle_avoidance_rl.utils.eval_metrics_callback import CustomEvalCallback
 from uav_nav_obstacle_avoidance_rl.utils.train_metrics_callback import TrainMetricsCallback
 
@@ -47,16 +46,16 @@ def run_exp(
     visual_obstacles: bool = False,  # only for evaluation
 
     # observation parameters
-    perception_mode: Literal["none", "lidar"] = "lidar",
+    perception_mode: str = "lidar",  # options: "none", "lidar"
     num_rays_horizontal: int = 36,
     num_rays_vertical: int = 1,
     max_range: float = 10.0,
     min_range: float = 0.1,
-    fov_horizontal: float = 360.0,
+    fov_horizontal: float = 360.0, # XXX adjust angle calculations in lidar wrapper if val. < 360.0
     fov_vertical: float = 30.0,
     ray_start_offset: float = 0.15,
     normalize_distances: bool = True,
-    add_to_obs: Literal["append", "separate", "replace"] = "separate",
+    add_to_obs: str = "separate",  # options: "append", "separate", "replace"
 
     # simulation parameters
     max_duration_seconds: float = 80.0,  # max simulation time of the env
@@ -98,6 +97,17 @@ def run_exp(
         "visual_obstacles": visual_obstacles,
         "num_obstacles": num_obstacles,
         "obstacle_strategy": obstacle_strategy,
+        # LiDAR wrapper params
+        "perception_mode": perception_mode,
+        "num_rays_horizontal": num_rays_horizontal,
+        "num_rays_vertical": num_rays_vertical,
+        "max_range": max_range,
+        "min_range": min_range,
+        "fov_horizontal": fov_horizontal,
+        "fov_vertical": fov_vertical,
+        "ray_start_offset": ray_start_offset,
+        "normalize_distances": normalize_distances,
+        "add_to_obs": add_to_obs,
         # PPO hyperparameters
         "learning_rate": learning_rate,
         "batch_size": batch_size,
@@ -210,7 +220,7 @@ def run_exp(
     )
 
     # analyze environment
-    env_helpers.analyse_env(vec_env)
+    base_env_test.analyse_env(vec_env)
 
     # Setup callbacks
     callbacks = []

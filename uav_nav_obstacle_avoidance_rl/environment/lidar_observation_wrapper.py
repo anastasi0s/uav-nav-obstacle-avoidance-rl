@@ -91,7 +91,7 @@ class LidarObservationWrapper(gym.ObservationWrapper):
         # generate all ray directions
         for v_angle in v_angles:
             for h_angle in h_angles:
-                # spherical to cartesian conversion
+                # spherical to cartesian conversion -> https://en.wikipedia.org/wiki/Spherical_coordinate_system
                 # x: forward, y: left, z: up (body frame)
                 cos_v = math.cos(v_angle)  # cos(v_angle) -> use elevation angle (v_angle is the angle from the horizontal plane (elevation))
                 x = cos_v * math.cos(h_angle)

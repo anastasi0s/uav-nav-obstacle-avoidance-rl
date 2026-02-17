@@ -13,7 +13,7 @@ from PyFlyt.gym_envs.utils.waypoint_handler import WaypointHandler
 # - Modified dtype of observation_space and targets
 """Wrapper class for flattening the waypoint envs to use homogeneous observation spaces."""
 class FlattenVectorVoyagerEnv(ObservationWrapper):
-    def __init__(self, env: Env, context_length=2):
+    def __init__(self, env: Env, context_length):
         """__init__.
 
         Args:

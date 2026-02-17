@@ -252,7 +252,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         attitude[1] = ang_pos[2]  # (1,) - yaw, rotation position
         attitude[2:5] = lin_vel  # (3,) - body frame linear velocity vector (u, v, w)
         attitude[5] = lin_pos[2]  # (1,) - z position
-        attitude[6:10] = (self.action)  # (4,) - previous actions  # TODO check for other methods to capture temporal information of taken actions
+        attitude[6:10] = (self.action)  # (4,) - previous action  # TODO check for other methods to capture temporal information of taken actions
 
         # # create empty array of type float32 -> compute the target deltas with the method from the waypointhandler -> fill array
         # target_deltas = np.empty((1,3), dtype=np.float32)
@@ -299,7 +299,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         if self.step_count > self.max_steps:
             self.truncation |= True
 
-        # check for collisions with obstacles and the floor
+        # check for collisions of the drone
         if np.any(self.env.contact_array[self.env.planeId]):
             self.reward = -100.0
             self.info["collision"] = True

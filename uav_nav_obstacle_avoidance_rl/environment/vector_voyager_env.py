@@ -299,8 +299,8 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         if self.step_count > self.max_steps:
             self.truncation |= True
 
-        # check for collisions of the drone
-        if np.any(self.env.contact_array[self.env.planeId]):
+        # check for collisions between the drone and any other body in the space
+        if np.any(self.env.contact_array[self.env.drones[0].Id]):
             self.reward = -100.0
             self.info["collision"] = True
             self.termination |= True

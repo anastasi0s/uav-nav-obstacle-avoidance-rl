@@ -107,7 +107,7 @@ class TrainMetricsCallback(BaseCallback):
                 # get target position
                 self.current_episode_data[env_idx]["target_position"] = (
                     underlying_env.waypoints.targets[0].copy()
-                )  # NOTE adjust to multiple waypoints
+                )  # XXX adjust for multiple waypoints
 
             # process completed episode
             for env_idx, (done, info) in enumerate(zip(done, info)):
@@ -214,7 +214,7 @@ class TrainMetricsCallback(BaseCallback):
         # direct distance to target
         direct_distance = np.linalg.norm(
             target_position - start_position
-        )  # NOTE adjust this for multiple waypoint targets
+        )  # XXX adjust for multiple waypoint targets
         if direct_distance == 0:
             return 0.0
 

@@ -223,7 +223,7 @@ class CustomEvalCallback(EvalCallback):
                 # -> capture target position
                 self.current_episode_data["target_position"] = (
                     self.underlying_env.waypoints.targets[0].copy()
-                )  # TODO adjust to multiple waypoints
+                )  # XXX adjust for multiple waypoints
 
             # process completed episodes
             if done:
@@ -305,7 +305,7 @@ class CustomEvalCallback(EvalCallback):
             )
             self.current_eval_cycle_data["target_position_history"].append(
                 np.array(self.current_episode_data["target_position"]).copy()
-            )  # NOTE adjust for mulitple waypoints
+            )  # XXX adjust for mulitple waypoints
 
             self.current_eval_cycle_data["obstacles_history"].append(
                 self.current_episode_data["obstacles"].copy()  # list of obstacles (dicts)

@@ -129,7 +129,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             targets.append(new_position)
 
             # mark the voxel as occupied, this will prevent spawning obstacles in the same voxel
-            self.voxel_grid.mark_voxel(free_voxel, occupied=True)
+            self.voxel_grid.mark_voxels([free_voxel], occupied=True)
 
         return np.array(targets, dtype=np.float32)
 
@@ -137,7 +137,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         """
         init obstacles: create obstacle bodies
         """
-        for i in range(num_obstacles):
+        for _ in range(num_obstacles):
             if self.visual_obstacles:
                 # create visual shape
                 visual_id = self.env.createVisualShape(
@@ -177,20 +177,29 @@ class VectorVoyagerEnv(QuadXBaseEnv):
 
     def _distribute_obstacles(self):
         """distribute obstacles at free-voxel positions"""
-        for i, obstacle_id in enumerate(self.obstacles):
-            free_voxel = self.voxel_grid.get_random_free_voxel()
-            new_position = self.voxel_grid.voxel_to_world(free_voxel)
-
-            # readjust the center of the object to spawn the cylinders over the full-hight of the env
-            new_position[2] = self.voxel_grid.z_min + (self.voxel_grid.z_size / 2)
-
-            # mark this voxel as occupied
-            self.voxel_grid.mark_voxel(free_voxel, occupied=True)
+        for obstacle_id in self.obstacles:
+            # get voxel occupancy
+            occupancy_grid = self.voxel_grid.get_occupancy()  # 3d ndarray (x,y,z) 1=occupied, 0=free
+            occupancy_mask = ~occupancy_grid  # invert: 0=occupied, 1=free
+            
+            # check for free columns -> pick one randomly
+            col_free = np.all(occupancy_mask, axis=2)  # check occupancy along z axis -> returns array of shape (nx, ny) containing bool True if the whole nz was free and False otherwise.
+            free_columns = np.argwhere(col_free)  # get (i, j) of free columns
+            
+            if len(free_columns) == 0:
+                logger.warning("No free columns available for obstacles!")
+                break
+            column = self.np_random.choice(free_columns)
+            i, j = column
+            k = self.voxel_grid.nz // 2
+            
+            free_center_voxel = (i, j, k)  # determine the voxel at the center of the free column -> expand (i, j) by k at the center
+            free_position = self.voxel_grid.voxel_to_world(free_center_voxel)
 
             # reset obstacle position in pybullet
             self.env.resetBasePositionAndOrientation(
                 obstacle_id,
-                posObj=new_position,
+                posObj=free_position,
                 ornObj=[0, 0, 0, 1],
             )
 
@@ -200,6 +209,10 @@ class VectorVoyagerEnv(QuadXBaseEnv):
                 linearVelocity=[0.0, 0.0, 0.0],
                 angularVelocity=[0.0, 0.0, 0.0],
             )
+
+            # mark the voxels of that column as occupied
+            column_voxels = [(i, j, kk) for kk in range(self.voxel_grid.nz)]  # get list of column voxels
+            self.voxel_grid.mark_voxels(column_voxels, occupied=True)
 
     def reset(
         self,
@@ -224,15 +237,11 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # create random UAV start position and set it
         free_voxel = self.voxel_grid.get_random_free_voxel()
         start_pos = self.voxel_grid.voxel_to_world(free_voxel)
-        self.start_pos = start_pos.reshape(
-            1, -1
-        )  # reshape 1D array to 2D array with shape (1, 3). This overwrites the base env start_pos attribute
-        self.voxel_grid.mark_voxel(free_voxel, occupied=True)  # mark uav start position as occupied
+        self.start_pos = start_pos.reshape(1, -1)  # reshape 1D array to 2D array with shape (1, 3). This overwrites the base env start_pos attribute
+        self.voxel_grid.mark_voxels([free_voxel], occupied=True)  # mark uav start position as occupied
 
         # start reset procedure using the base env's methods
-        super().begin_reset(
-            seed, drone_options=drone_options
-        )  # Aviary is initialized and all PyBullet bodies (including obstacles) are destroyed. Obstacles are recreated down the line.
+        super().begin_reset(seed, drone_options=drone_options)  # Aviary is initialized, uav start position is set and all PyBullet bodies (including obstacles) are destroyed. Obstacles are recreated down the line.
 
         # reset waypoint handler, which sets the current target
         self.waypoints.reset(self.env, self.np_random)

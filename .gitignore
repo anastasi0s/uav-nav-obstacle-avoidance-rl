@@ -2,6 +2,7 @@
 models/
 references/
 reports/
+assets/
 # wandb/
 drafts/
 run.log

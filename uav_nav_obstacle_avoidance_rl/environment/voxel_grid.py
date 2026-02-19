@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import List, Tuple
 
 import numpy as np
 
@@ -17,6 +17,7 @@ class VoxelGrid:
         args:
             grid_sizes: the size of each grid dimension in meter (x_size, y_size, z_size)
             voxel_size: size of each voxel cube in meter
+            rng: np random generator
         """
         self.x_size, self.y_size, self.z_size = (
             grid_sizes  # used also by object instances
@@ -60,38 +61,30 @@ class VoxelGrid:
         z = self.z_min + (k + 0.5) * self.voxel_size
         return np.array([x, y, z])  # cartesian position
 
-    def is_voxel_free(self, voxel_idx: Tuple[int, int, int]) -> bool:
+    def are_voxels_free(self, voxel_indices: List[Tuple[int, int, int]]) -> List[bool]:
         """
-        check if a voxel is free (not occupied)
+        check if voxels are free (not occupied)
 
         args:
-            voxel_idx: i, j, k
+            voxel_indices: list of (i, j, k) tuples
 
         return:
-            bool
+            list of bools
         """
-        i, j, k = voxel_idx
-        # check if voxel_idx is inside bounds
-        if 0 <= i < self.nx and 0 <= j < self.ny and 0 <= k < self.nz:
-            free = not self.grid[i, j, k]
-        else:
-            # checking voxel_idx outside bounds
-            free = False
-        return free
-
-    def mark_voxel(self, voxel_idx: Tuple[int, int, int], occupied: bool):
-        """
-        mark a voxel as occupied or free
-        args:
-            voxel_idx: i, j, k
-            occupied: bool
-        """
-        i, j, k = voxel_idx
-        if 0 <= i < self.nx and 0 <= j < self.ny and 0 <= k < self.nz:
-            if occupied:
-                self.grid[i, j, k] = True
+        result = []
+        for i, j, k in voxel_indices:
+            if 0 <= i < self.nx and 0 <= j < self.ny and 0 <= k < self.nz:
+                result.append(not self.grid[i, j, k])
             else:
-                self.grid[i, j, k] = False
+                result.append(False)
+        return result
+
+    def get_occupancy(self):
+        """
+        Return:
+            grid of current occupancy status of all voxels in 3d space: ndarray
+        """
+        return self.grid
 
     def get_random_free_voxel(self) -> Tuple[int, int, int]:
         """
@@ -104,7 +97,7 @@ class VoxelGrid:
         if len(free_voxels) == 0:
             logger.error("No free voxels available!")
             raise ValueError("No free voxels available!")
-        idx = self.rng.choice(free_voxels)  # TODO adjust this when using a systematic approach to spawn obstacles
+        idx = self.rng.choice(free_voxels)
         return tuple(idx)
 
     def get_random_free_position(self) -> np.ndarray:
@@ -113,6 +106,19 @@ class VoxelGrid:
         position_coordinates = self.voxel_to_world(voxel_idx)
         return position_coordinates
 
+    def mark_voxels(self, voxel_indices: List[Tuple[int, int, int]], occupied: bool):
+        """
+        mark voxels as occupied or free
+
+        args:
+            voxel_indices: list of (i, j, k) tuples
+            occupied: bool
+        """
+        for i, j, k in voxel_indices:
+            if 0 <= i < self.nx and 0 <= j < self.ny and 0 <= k < self.nz:
+                self.grid[i, j, k] = occupied
+
     def reset_occupancy(self):
         """reset all voxels to free (unoccupied) state"""
         self.grid.fill(False)
+

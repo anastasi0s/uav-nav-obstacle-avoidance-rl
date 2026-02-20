@@ -55,9 +55,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.grid_sizes = grid_sizes
         self.voxel_size = voxel_size
         self.min_height = min_height
-        self.max_dimension_size = max(
-            self.grid_sizes
-        )  # tha dimension with the highest value
+        self.max_dimension_size = max(self.grid_sizes)  # tha dimension with the highest value
         # waypoint parameters
         self.num_targets = num_targets
         self.sparse_reward = sparse_reward
@@ -66,6 +64,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.num_obstacles = num_obstacles
         self.visual_obstacles = visual_obstacles
         self.obstacles = []  # store PyBullet body IDs
+        self.boundary_wall_ids = []  # # store PyBullet body IDs for walls
 
         # Note: obstacles are created in the first reset() call when self.env (Aviary/Pybullet client) is available. Pybullet connections from gym are created after env reset()
 
@@ -120,6 +119,8 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             }
         )
 
+
+
     def _create_targets(self) -> np.ndarray:
         """create waypoint targets that respect the voxel grid and obstacles"""
         targets = []
@@ -132,6 +133,56 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             self.voxel_grid.mark_voxels([free_voxel], occupied=True)
 
         return np.array(targets, dtype=np.float32)
+
+    def _create_boundary_walls(self):
+        """
+        create invisavle collision walls at env boundaries so that lidar rays can detect them
+        """
+        vg = self.voxel_grid
+        half_thickness = 0.01
+
+        # (position, halfExtents) for each wall
+        walls = [
+            # -x wall
+            (
+                [vg.x_min - half_thickness, 0.0, vg.z_size / 2],
+                [half_thickness, vg.y_size / 2, vg.z_size / 2]
+            ),
+            # +x wall
+            (
+                [vg.x_max + half_thickness, 0.0, vg.z_size / 2],
+                [half_thickness, vg.y_size / 2, vg.z_size / 2]
+            ),
+            # -y wall
+            (
+                [0.0, vg.y_min - half_thickness, vg.z_size / 2],
+                [vg.x_size / 2, half_thickness, vg.z_size / 2]
+            ),
+            # +y wall 
+            (
+                [0.0, vg.y_min + half_thickness, vg.z_size / 2],
+                [vg.x_size / 2, half_thickness, vg.z_size / 2]
+            ),
+            # celling
+            (
+                [0.0, 0.0, vg.z_max + half_thickness],
+                [vg.x_size / 2, vg.y_size / 2, half_thickness]
+            )
+        ]
+
+        for pos, half_extents in walls:
+            col_id = self.env.createCollisionShape(
+                shapeType=self.env.GEOM_BOX,
+                halfExtents=half_extents,
+            )
+            body_id = self.env.createMultiBody(
+                baseMass=0.0,
+                baseCollisionShapeIndex=int(col_id),
+                basePosition=pos,
+                baseOrientation=[0, 0, 0, 1],
+            )
+
+            self.boundary_wall_ids.append(body_id)
 
     def _create_obstacles(self, num_obstacles: int):
         """
@@ -243,15 +294,17 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # start reset procedure using the base env's methods
         super().begin_reset(seed, drone_options=drone_options)  # Aviary is initialized, uav start position is set and all PyBullet bodies (including obstacles) are destroyed. Obstacles are recreated down the line.
 
-        # reset waypoint handler, which sets the current target
+        # clear old walls -> create new boundary walls
+        self.boundary_wall_ids.clear()
+        self._create_boundary_walls()
+
+        # reset waypoint handler, which sets the current target -> create targets manually from voxel grid and overwrite the targets attribute
         self.waypoints.reset(self.env, self.np_random)
-        # create targets manually from voxel grid and overwrite the targets attribute
         self.waypoints.targets = self._create_targets()
 
-        # cleat old obstacle IDs -> recreate new obstacles (after Aviary is initialized and self.env is available)
+        # cleat old obstacle IDs -> recreate new obstacles (after Aviary is initialized and self.env is available) -> reposition obstacles to random locations (they were created at hidden position [0,0,-10])
         self.obstacles.clear()
         self._create_obstacles(num_obstacles=self.num_obstacles)
-        # reposition obstacles to random locations (they were created at hidden position [0,0,-10])
         self._distribute_obstacles()
 
         # init tracked metrics
@@ -291,7 +344,8 @@ class VectorVoyagerEnv(QuadXBaseEnv):
     # called in the step function of the QuadXBaseEnv parent class
     def compute_term_trunc_reward(self) -> None:
         """
-        compute termination, truncation, and reward of the current timestep
+        1. compute termination, truncation, and reward of the current timestep in self.compute_base_term_trunc_reward().
+        2. Computes rewards.
 
         use reward and termination logic from pyflyt env (for now -> # TODO add custom reward function)
         """
@@ -316,10 +370,13 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             self.info["env_complete"] = self.waypoints.all_targets_reached
             self.info["num_targets_reached"] = self.waypoints.num_targets_reached
 
-    # called in the step function
+    # part of the compute_term_trunc_reward call above
     def compute_base_term_trunc_reward(self) -> None:
         """
-        custom base trmination, truncation and reward computation method that is overwritting the parent class, adjusting for rectangular bounds.
+        checks if:
+        1. episode ends
+        2. collision occurred
+        Custom base trmination, truncation and reward computation method that is overwritting the parent class
         """
         # exceed step count
         if self.step_count > self.max_steps:
@@ -331,19 +388,19 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             self.info["collision"] = True
             self.termination |= True
 
-        ## CUSTOM PART
-        # check exceed rectangular bounds on cartesian grid_sizes
-        lin_pos = self.env.state(0)[-1]  # get current position (lin_pos is at state[3])
-        x, y, z = lin_pos  # [x, y, z]
+        # ## unnecessary since walls prevent out of bounds and collisions with them are detected above 
+        # # check exceed rectangular bounds on cartesian grid_sizes
+        # lin_pos = self.env.state(0)[-1]  # get current position (lin_pos is at state[3])
+        # x, y, z = lin_pos  # [x, y, z]
 
-        if (
-            x < self.voxel_grid.x_min
-            or x > self.voxel_grid.x_max
-            or y < self.voxel_grid.y_min
-            or y > self.voxel_grid.y_max
-            or z
-            > self.voxel_grid.z_max  # z constrains the max hight the uav is allowed to fly. collision with the floor is checked above already!
-        ):
-            self.reward = -100.0
-            self.info["out_of_bounds"] = True
-            self.termination |= True
+        # if (
+        #     x < self.voxel_grid.x_min
+        #     or x > self.voxel_grid.x_max
+        #     or y < self.voxel_grid.y_min
+        #     or y > self.voxel_grid.y_max
+        #     or z
+        #     > self.voxel_grid.z_max  # z constrains the max hight the uav is allowed to fly. collision with the floor is checked above already!
+        # ):
+        #     self.reward = -100.0
+        #     self.info["out_of_bounds"] = True
+        #     self.termination |= True

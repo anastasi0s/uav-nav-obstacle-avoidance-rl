@@ -20,30 +20,20 @@ def make_flat_voyager(**env_kwargs):
     Create a flattened Vector Voyager environment
 
     Args:
-        **env_kwargs: Additional arguments for the environment (including num_targets)
+        **env_kwargs: Additional arguments for the environment (including num_targets).
+            perception_mode: "lidar" or "none" (default "none")
+            lidar_*: any LidarObservationWrapper kwargs, prefixed with "lidar_"
     """
-    # extract num_targets from env_kwargs
-    num_targets = env_kwargs.get("num_targets", 1)
-
     # extract wrapper-specific parameters (not accepted by VectorVoyagerEnv)
-    perception_mode = env_kwargs.pop("perception_mode", "none")
-    lidar_kwargs = {
-        "num_rays_horizontal": env_kwargs.pop("num_rays_horizontal", 36),
-        "num_rays_vertical": env_kwargs.pop("num_rays_vertical", 1),
-        "max_range": env_kwargs.pop("max_range", 10.0),
-        "min_range": env_kwargs.pop("min_range", 0.1),
-        "fov_horizontal": env_kwargs.pop("fov_horizontal", 360.0),
-        "fov_vertical": env_kwargs.pop("fov_vertical", 30.0),
-        "ray_start_offset": env_kwargs.pop("ray_start_offset", 0.15),
-        "normalize_distances": env_kwargs.pop("normalize_distances", True),
-        "add_to_obs": env_kwargs.pop("add_to_obs", "separate"),
-    }
+    lidar_kwargs = {k.removeprefix("lidar_"): env_kwargs.pop(k) for k in list(env_kwargs) if k.startswith("lidar_")}
+    perception_mode = env_kwargs.pop("perception_mode")
+    num_targets = env_kwargs.get("num_targets")
 
     # create base environment
     env = VectorVoyagerEnv(**env_kwargs)
 
-    # wrap with LiDAR observation
     if perception_mode == "lidar":
+        # wrap with LiDAR observation
         env = LidarObservationWrapper(env, **lidar_kwargs)
         env = LidarFlattenWrapper(env, context_length=num_targets)
     else:

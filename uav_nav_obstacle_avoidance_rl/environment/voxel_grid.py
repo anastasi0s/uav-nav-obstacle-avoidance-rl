@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import List, Tuple
 
 import numpy as np
@@ -10,7 +11,7 @@ logger = config.logger
 class VoxelGrid:
     """3d voxel grid for discretizing the space and placing obstacles"""
 
-    def __init__(self, grid_sizes: Tuple[float, float, float], voxel_size: float, rng):
+    def __init__(self, grid_sizes: Sequence[float], voxel_size: float, rng):
         """
         initialize voxel grid
 

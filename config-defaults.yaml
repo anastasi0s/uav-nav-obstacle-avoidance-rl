@@ -1,0 +1,118 @@
+# this file is auto-loaded by wandb.init() in train.py -> keys become part of run.config
+
+# --- Environment: Boundary ---
+env_grid_sizes:
+  desc: Grid sizes [x, y, z] in meters
+  value: [10.0, 10.0, 5.0]
+env_voxel_size:
+  desc: Voxel resolution (meters)
+  value: 1.0
+env_min_height:
+  desc: Min allowed flight height; collision below this
+  value: 0.01
+
+# --- Environment: Waypoints ---
+env_num_targets:
+  desc: Number of navigation targets per episode
+  value: 1
+env_sparse_reward:
+  desc: Use sparse (goal-only) reward
+  value: false
+env_use_yaw_targets:
+  desc: Require yaw alignment with target
+  value: false
+env_goal_reach_distance:
+  desc: Distance threshold to consider target reached (meters)
+  value: 0.2
+env_goal_reach_angle:
+  desc: Angle threshold for yaw alignment (radians)
+  value: 0.1
+
+# --- Environment: Obstacles ---
+env_obstacle_strategy:
+  desc: How obstacles are placed (random, fixed, curriculum)
+  value: "random"
+env_num_obstacles:
+  desc: Number of obstacles in the environment
+  value: 6
+env_visual_obstacles:
+  desc: Render visual obstacle meshes (eval only)
+  value: false
+
+# --- Environment: Simulation ---
+env_max_duration_seconds:
+  desc: Max episode duration (seconds)
+  value: 80.0
+env_flight_mode:
+  desc: PyFlyt control mode (5 = velocity control) (u, v, vr, vz) — forward, lateral, yaw, vertical m/s (yaw:r/s)
+  value: 5
+env_angle_representation:
+  desc: Angle representation in observation
+  value: "quaternion"
+env_agent_hz:
+  desc: Agent-environment interaction rate (Hz)
+  value: 30
+env_render_mode:
+  desc: Gymnasium render mode (null for headless)
+  value: null
+env_render_resolution:
+  desc: Render resolution [width, height] in pixels
+  value: [480, 480]
+
+# --- LiDAR / Perception (wrapper) ---
+env_perception_mode:
+  desc: Perception type (none, lidar)
+  value: "lidar"
+env_lidar_num_rays_horizontal:
+  desc: Number of horizontal LiDAR rays
+  value: 36
+env_lidar_num_rays_vertical:
+  desc: Number of vertical LiDAR rays
+  value: 1
+env_lidar_max_range:
+  desc: Max LiDAR sensing range (meters)
+  value: 10.0
+env_lidar_min_range:
+  desc: Min LiDAR sensing range (meters)
+  value: 0.1
+env_lidar_fov_horizontal:  # XXX adjust angle calculations in lidar wrapper if < 360.0
+  desc: Horizontal field of view (degrees)
+  value: 360.0
+env_lidar_fov_vertical:
+  desc: Vertical field of view (degrees)
+  value: 30.0
+env_lidar_ray_start_offset:
+  desc: LiDAR ray start offset from drone center (meters)
+  value: 0.15
+env_lidar_normalize_distances:
+  desc: Normalize LiDAR distances to [0, 1]
+  value: true
+env_lidar_add_to_obs:
+  desc: How to add LiDAR to observation (append, separate, replace)
+  value: "separate"
+
+# --- PPO Hyperparameters ---
+ppo_learning_rate:
+  desc: PPO learning rate
+  value: 0.0003
+ppo_batch_size:
+  desc: PPO minibatch size
+  value: 64
+ppo_n_steps:
+  desc: PPO rollout length per env
+  value: 2048
+ppo_gamma:
+  desc: Discount factor
+  value: 0.99
+ppo_gae_lambda:
+  desc: GAE lambda for advantage estimation
+  value: 0.95
+ppo_clip_range:
+  desc: PPO clipping range
+  value: 0.2
+ppo_ent_coef:
+  desc: Entropy coefficient (exploration bonus)
+  value: 0.0
+ppo_vf_coef:
+  desc: Value function loss coefficient
+  value: 0.5

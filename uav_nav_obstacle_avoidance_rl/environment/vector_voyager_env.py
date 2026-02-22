@@ -1,4 +1,6 @@
-from typing import Any, Literal, Tuple
+from collections.abc import Sequence
+from typing import Any, Literal
+import os
 
 import gymnasium as gym
 import numpy as np
@@ -16,9 +18,9 @@ class VectorVoyagerEnv(QuadXBaseEnv):
     def __init__(
         self,
         # boundary parameters
-        grid_sizes: Tuple[float, float, float],  # (x, y, z)
+        grid_sizes: Sequence[float],  # (x, y, z)
         voxel_size: float,
-        min_height: float = 0.0,  # default: 0.1,  min allowed hight, collision is detected if below that height
+        min_height: float = 0.0,  # min allowed hight, collision is detected if below that height
         # waypoint parameters
         num_targets: int = 1,
         sparse_reward: bool = False,
@@ -35,7 +37,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         angle_representation: Literal["euler", "quaternion"] = "quaternion",
         agent_hz: int = 30,  # looprate of the agent to environment interaction
         render_mode: None | Literal["human", "rgb_array"] = None,
-        render_resolution: tuple[int, int] = (480, 480),
+        render_resolution: Sequence[int] = (480, 480),
     ):
         # init parent class (QuadxBaseEnv)
         super().__init__(
@@ -48,14 +50,16 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             angle_representation=angle_representation,  # its rquired in the base class but its not used in this env
             agent_hz=agent_hz,
             render_mode=render_mode,
-            render_resolution=render_resolution,
+            render_resolution=(render_resolution[0], render_resolution[1]),
         )
 
         # boundary parameters
         self.grid_sizes = grid_sizes
         self.voxel_size = voxel_size
         self.min_height = min_height
-        self.max_dimension_size = max(self.grid_sizes)  # tha dimension with the highest value
+        self.max_dimension_size = max(
+            self.grid_sizes
+        )  # tha dimension with the highest value
         # waypoint parameters
         self.num_targets = num_targets
         self.sparse_reward = sparse_reward
@@ -119,8 +123,6 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             }
         )
 
-
-
     def _create_targets(self) -> np.ndarray:
         """create waypoint targets that respect the voxel grid and obstacles"""
         targets = []
@@ -146,28 +148,28 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             # -x wall
             (
                 [vg.x_min - half_thickness, 0.0, vg.z_size / 2],
-                [half_thickness, vg.y_size / 2, vg.z_size / 2]
+                [half_thickness, vg.y_size / 2, vg.z_size / 2],
             ),
             # +x wall
             (
                 [vg.x_max + half_thickness, 0.0, vg.z_size / 2],
-                [half_thickness, vg.y_size / 2, vg.z_size / 2]
+                [half_thickness, vg.y_size / 2, vg.z_size / 2],
             ),
             # -y wall
             (
                 [0.0, vg.y_min - half_thickness, vg.z_size / 2],
-                [vg.x_size / 2, half_thickness, vg.z_size / 2]
+                [vg.x_size / 2, half_thickness, vg.z_size / 2],
             ),
-            # +y wall 
+            # +y wall
             (
                 [0.0, vg.y_min + half_thickness, vg.z_size / 2],
-                [vg.x_size / 2, half_thickness, vg.z_size / 2]
+                [vg.x_size / 2, half_thickness, vg.z_size / 2],
             ),
             # celling
             (
                 [0.0, 0.0, vg.z_max + half_thickness],
-                [vg.x_size / 2, vg.y_size / 2, half_thickness]
-            )
+                [vg.x_size / 2, vg.y_size / 2, half_thickness],
+            ),
         ]
 
         for pos, half_extents in walls:
@@ -230,21 +232,29 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         """distribute obstacles at free-voxel positions"""
         for obstacle_id in self.obstacles:
             # get voxel occupancy
-            occupancy_grid = self.voxel_grid.get_occupancy()  # 3d ndarray (x,y,z) 1=occupied, 0=free
+            occupancy_grid = (
+                self.voxel_grid.get_occupancy()
+            )  # 3d ndarray (x,y,z) 1=occupied, 0=free
             occupancy_mask = ~occupancy_grid  # invert: 0=occupied, 1=free
-            
+
             # check for free columns -> pick one randomly
-            col_free = np.all(occupancy_mask, axis=2)  # check occupancy along z axis -> returns array of shape (nx, ny) containing bool True if the whole nz was free and False otherwise.
+            col_free = np.all(
+                occupancy_mask, axis=2
+            )  # check occupancy along z axis -> returns array of shape (nx, ny) containing bool True if the whole nz was free and False otherwise.
             free_columns = np.argwhere(col_free)  # get (i, j) of free columns
-            
+
             if len(free_columns) == 0:
                 logger.warning("No free columns available for obstacles!")
                 break
             column = self.np_random.choice(free_columns)
             i, j = column
             k = self.voxel_grid.nz // 2
-            
-            free_center_voxel = (i, j, k)  # determine the voxel at the center of the free column -> expand (i, j) by k at the center
+
+            free_center_voxel = (
+                i,
+                j,
+                k,
+            )  # determine the voxel at the center of the free column -> expand (i, j) by k at the center
             free_position = self.voxel_grid.voxel_to_world(free_center_voxel)
 
             # reset obstacle position in pybullet
@@ -262,7 +272,9 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             )
 
             # mark the voxels of that column as occupied
-            column_voxels = [(i, j, kk) for kk in range(self.voxel_grid.nz)]  # get list of column voxels
+            column_voxels = [
+                (i, j, kk) for kk in range(self.voxel_grid.nz)
+            ]  # get list of column voxels
             self.voxel_grid.mark_voxels(column_voxels, occupied=True)
 
     def reset(
@@ -288,11 +300,23 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # create random UAV start position and set it
         free_voxel = self.voxel_grid.get_random_free_voxel()
         start_pos = self.voxel_grid.voxel_to_world(free_voxel)
-        self.start_pos = start_pos.reshape(1, -1)  # reshape 1D array to 2D array with shape (1, 3). This overwrites the base env start_pos attribute
-        self.voxel_grid.mark_voxels([free_voxel], occupied=True)  # mark uav start position as occupied
+        self.start_pos = start_pos.reshape(
+            1, -1
+        )  # reshape 1D array to 2D array with shape (1, 3). This overwrites the base env start_pos attribute
+        self.voxel_grid.mark_voxels(
+            [free_voxel], occupied=True
+        )  # mark uav start position as occupied
 
         # start reset procedure using the base env's methods
-        super().begin_reset(seed, drone_options=drone_options)  # Aviary is initialized, uav start position is set and all PyBullet bodies (including obstacles) are destroyed. Obstacles are recreated down the line.
+        # suppress PyBullet's C-level "argv[0]=" stdout noise on each new Aviary connection -> clean terminal output
+        with open(os.devnull, "w") as devnull:
+            old_fd = os.dup(1)
+            os.dup2(devnull.fileno(), 1)
+            try:
+                super().begin_reset(seed, drone_options=drone_options)  # Aviary is initialized, uav start position is set and all PyBullet bodies (including obstacles) are destroyed. Obstacles are recreated down the line.
+            finally:
+                os.dup2(old_fd, 1)
+                os.close(old_fd)
 
         # clear old walls -> create new boundary walls
         self.boundary_wall_ids.clear()
@@ -388,7 +412,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             self.info["collision"] = True
             self.termination |= True
 
-        # ## unnecessary since walls prevent out of bounds and collisions with them are detected above 
+        # ## unnecessary since walls prevent out of bounds and collisions with them are detected above
         # # check exceed rectangular bounds on cartesian grid_sizes
         # lin_pos = self.env.state(0)[-1]  # get current position (lin_pos is at state[3])
         # x, y, z = lin_pos  # [x, y, z]

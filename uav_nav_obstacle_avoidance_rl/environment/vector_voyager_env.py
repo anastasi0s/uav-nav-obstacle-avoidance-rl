@@ -250,11 +250,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             i, j = column
             k = self.voxel_grid.nz // 2
 
-            free_center_voxel = (
-                i,
-                j,
-                k,
-            )  # determine the voxel at the center of the free column -> expand (i, j) by k at the center
+            free_center_voxel = (i, j, k,)  # determine the voxel at the center of the free column -> expand (i, j) by k at the center
             free_position = self.voxel_grid.voxel_to_world(free_center_voxel)
 
             # reset obstacle position in pybullet
@@ -300,9 +296,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # create random UAV start position and set it
         free_voxel = self.voxel_grid.get_random_free_voxel()
         start_pos = self.voxel_grid.voxel_to_world(free_voxel)
-        self.start_pos = start_pos.reshape(
-            1, -1
-        )  # reshape 1D array to 2D array with shape (1, 3). This overwrites the base env start_pos attribute
+        self.start_pos = start_pos.reshape(1, -1)  # reshape 1D array to 2D array with shape (1, 3). This overwrites the base env start_pos attribute
         self.voxel_grid.mark_voxels(
             [free_voxel], occupied=True
         )  # mark uav start position as occupied

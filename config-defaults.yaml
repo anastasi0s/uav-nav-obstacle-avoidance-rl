@@ -34,7 +34,7 @@ env_obstacle_strategy:
   value: "random"
 env_num_obstacles:
   desc: Number of obstacles in the environment
-  value: 6
+  value: 8
 env_visual_obstacles:
   desc: Render visual obstacle meshes (eval only)
   value: false

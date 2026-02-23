@@ -36,16 +36,21 @@ def run_exp(
     training script with W&B integration for experiment tracking
     """
 
+    # ----- 1. init W&B --------
+
+    config_overwrite = {"env_num_obstacles": 15}  # overwrite some parameters for testing
     with wandb.init(
         project=wandb_project,
         name=exp_name,
         tags=wandb_tags,
+        config=config_overwrite,
         dir=config.REPORTS_DIR.as_posix(),
         monitor_gym=True,  # auto-upload videos
         ) as run:
 
         env_config, ppo_config, monitor_info = split_config(run.config)
 
+        # ----- 2. create environments --------
         # create training environment
         vec_env = make_vec_env(
             env_helpers.make_flat_voyager,
@@ -65,7 +70,7 @@ def run_exp(
             monitor_kwargs=monitor_info,
         )
 
-        ## define callbacks
+        # ----- 3. callbacks --------
         callbacks = []
         # add W&B callback
         wandb_callback = WandbCallback(
@@ -88,7 +93,7 @@ def run_exp(
             best_model_save_path=f"{run.dir}/models",
             log_path=run.dir,
             eval_freq=eval_freq,
-            n_eval_episodes=20,
+            n_eval_episodes=40,
             deterministic=True,
             render=False,
             verbose=0,
@@ -99,7 +104,7 @@ def run_exp(
         callbacks.append(train_callback)
         callbacks.append(eval_callback)
 
-        # define model
+        # ----- 4. define and train model --------
         model = PPO(
             "MlpPolicy",
             vec_env,

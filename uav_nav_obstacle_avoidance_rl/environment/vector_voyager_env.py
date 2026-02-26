@@ -1,6 +1,5 @@
 from collections.abc import Sequence
-from typing import Any, Literal
-import os
+from typing import Any, List, Literal, Optional
 
 import gymnasium as gym
 import numpy as np
@@ -8,7 +7,7 @@ from PyFlyt.gym_envs.quadx_envs.quadx_base_env import QuadXBaseEnv
 from PyFlyt.gym_envs.utils.waypoint_handler import WaypointHandler
 
 from uav_nav_obstacle_avoidance_rl import config
-from uav_nav_obstacle_avoidance_rl.environment.voxel_grid import VoxelGrid
+from uav_nav_obstacle_avoidance_rl.environment.voxel_grid import OccupancyGrid
 
 logger = config.logger
 
@@ -18,8 +17,8 @@ class VectorVoyagerEnv(QuadXBaseEnv):
     def __init__(
         self,
         # boundary parameters
-        grid_sizes: Sequence[float],  # (x, y, z)
-        voxel_size: float,
+        grid_sizes: Sequence[float],  # (x, y, z) — occupancy grid uses only (x, y)
+        cell_size: float,  # cell size for the 2D occupancy grid
         min_height: float = 0.0,  # min allowed hight, collision is detected if below that height
         # waypoint parameters
         num_targets: int = 1,
@@ -29,7 +28,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         goal_reach_angle=0.1,  # not in use since use_yaw_targets is not in use
         # obstacle parameters
         obstacle_strategy: str = "random",  # "random"
-        num_obstacles: int = 3,
+        num_obstacles: int = 0,
         visual_obstacles: bool = False,  # only for evaluation
         # simulation parameters
         max_duration_seconds: float = 80.0,  # max simulation time of the env
@@ -41,11 +40,8 @@ class VectorVoyagerEnv(QuadXBaseEnv):
     ):
         # init parent class (QuadxBaseEnv)
         super().__init__(
-            start_pos=np.array(
-                [[0.0, 0.0, 1.0]]
-            ),  # uav starting at pos [0, 0, 1]. Is randomized and overwritten in reset()
+            start_pos=np.array([[0.0, 0.0, 1.0]]),  # uav starting at pos [0, 0, 1]. Is randomized and overwritten in reset()
             flight_mode=flight_mode,
-            # flight_dome_size=flight_dome_size,  # this is used only in a method of the parent class which has been overwritten by my custom env
             max_duration_seconds=max_duration_seconds,
             angle_representation=angle_representation,  # its rquired in the base class but its not used in this env
             agent_hz=agent_hz,
@@ -55,11 +51,9 @@ class VectorVoyagerEnv(QuadXBaseEnv):
 
         # boundary parameters
         self.grid_sizes = grid_sizes
-        self.voxel_size = voxel_size
+        self.z_size = grid_sizes[2]  # z dimension stored separately (not in occupancy grid)
+        self.cell_size = cell_size
         self.min_height = min_height
-        self.max_dimension_size = max(
-            self.grid_sizes
-        )  # tha dimension with the highest value
         # waypoint parameters
         self.num_targets = num_targets
         self.sparse_reward = sparse_reward
@@ -70,10 +64,12 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.obstacles = []  # store PyBullet body IDs
         self.boundary_wall_ids = []  # # store PyBullet body IDs for walls
 
+        # TODO add default stage (when curriculum callback is not used)
+
         # Note: obstacles are created in the first reset() call when self.env (Aviary/Pybullet client) is available. Pybullet connections from gym are created after env reset()
 
-        # init voxel grid
-        self.voxel_grid = VoxelGrid(grid_sizes, voxel_size, rng=self.np_random)
+        # init 2D occupancy grid (only XY plane)
+        self.occupancy_grid = OccupancyGrid(grid_sizes[:2], cell_size, rng=self.np_random)
 
         # init waypoint handler
         self.waypoints = WaypointHandler(
@@ -82,9 +78,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             use_yaw_targets=use_yaw_targets,
             goal_reach_distance=goal_reach_distance,
             goal_reach_angle=goal_reach_angle,
-            flight_dome_size=min(
-                grid_sizes
-            ),  # this is obsolete because _create_targets() is used for target setting
+            flight_dome_size=0.0,  # this is obsolete since _create_targets() is used for target setting
             min_height=min_height,
             np_random=self.np_random,
         )
@@ -106,15 +100,13 @@ class VectorVoyagerEnv(QuadXBaseEnv):
                 "attitude": gym.spaces.Box(
                     low=-np.inf,
                     high=np.inf,
-                    shape=(
-                        10,
-                    ),  # 10 = 1 (yaw position) + 1 (yaw vel) + 3 (lin_vel) + 1 (height) + 4 (previous actions)
+                    shape=(10,),  # 10 = 1 (yaw position) + 1 (yaw vel) + 3 (lin_vel) + 1 (height) + 4 (previous actions)
                     dtype=np.float32,
                 ),
                 "target_deltas": gym.spaces.Sequence(
                     space=gym.spaces.Box(
-                        low=-2 * self.max_dimension_size,
-                        high=2 * self.max_dimension_size,
+                        low=-2 * max(self.grid_sizes),
+                        high=2 * max(self.grid_sizes),
                         shape=(4,) if use_yaw_targets else (3,),
                         dtype=np.float32,
                     ),
@@ -123,52 +115,56 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             }
         )
 
+    # called in reset()
     def _create_targets(self) -> np.ndarray:
-        """create waypoint targets that respect the voxel grid and obstacles"""
+        """create waypoint targets that respect the occupancy grid and obstacles"""
         targets = []
         for _ in range(self.num_targets):
-            free_voxel = self.voxel_grid.get_random_free_voxel()
-            new_position = self.voxel_grid.voxel_to_world(free_voxel)
-            targets.append(new_position)
+            free_cell = self.occupancy_grid.get_random_free_cell()
+            x, y = self.occupancy_grid.cell_to_world(free_cell)
+            z = self.np_random.uniform(self.min_height + 0.5, self.z_size)
+            targets.append([x, y, z])
 
-            # mark the voxel as occupied, this will prevent spawning obstacles in the same voxel
-            self.voxel_grid.mark_voxels([free_voxel], occupied=True)
+            # mark the cell as occupied, this will prevent spawning obstacles in the same cell
+            self.occupancy_grid.mark_cells([free_cell], occupied=True)
 
         return np.array(targets, dtype=np.float32)
 
+    # called in reset()
     def _create_boundary_walls(self):
         """
         create invisavle collision walls at env boundaries so that lidar rays can detect them
         """
-        vg = self.voxel_grid
+        og = self.occupancy_grid
         half_thickness = 0.01
+        z_half = self.z_size / 2
 
         # (position, halfExtents) for each wall
         walls = [
             # -x wall
             (
-                [vg.x_min - half_thickness, 0.0, vg.z_size / 2],
-                [half_thickness, vg.y_size / 2, vg.z_size / 2],
+                [og.x_min - half_thickness, 0.0, z_half],
+                [half_thickness, og.y_size / 2, z_half],
             ),
             # +x wall
             (
-                [vg.x_max + half_thickness, 0.0, vg.z_size / 2],
-                [half_thickness, vg.y_size / 2, vg.z_size / 2],
+                [og.x_max + half_thickness, 0.0, z_half],
+                [half_thickness, og.y_size / 2, z_half],
             ),
             # -y wall
             (
-                [0.0, vg.y_min - half_thickness, vg.z_size / 2],
-                [vg.x_size / 2, half_thickness, vg.z_size / 2],
+                [0.0, og.y_min - half_thickness, z_half],
+                [og.x_size / 2, half_thickness, z_half],
             ),
             # +y wall
             (
-                [0.0, vg.y_min + half_thickness, vg.z_size / 2],
-                [vg.x_size / 2, half_thickness, vg.z_size / 2],
+                [0.0, og.y_max + half_thickness, z_half],
+                [og.x_size / 2, half_thickness, z_half],
             ),
-            # celling
+            # ceiling
             (
-                [0.0, 0.0, vg.z_max + half_thickness],
-                [vg.x_size / 2, vg.y_size / 2, half_thickness],
+                [0.0, 0.0, self.z_size + half_thickness],
+                [og.x_size / 2, og.y_size / 2, half_thickness],
             ),
         ]
 
@@ -290,16 +286,15 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         if options is None:
             options = {}
 
-        # reset occupancy voxel grid
-        self.voxel_grid.reset_occupancy()
+        # reset occupancy grid
+        self.occupancy_grid.reset_occupancy()
 
         # create random UAV start position and set it
-        free_voxel = self.voxel_grid.get_random_free_voxel()
-        start_pos = self.voxel_grid.voxel_to_world(free_voxel)
-        self.start_pos = start_pos.reshape(1, -1)  # reshape 1D array to 2D array with shape (1, 3). This overwrites the base env start_pos attribute
-        self.voxel_grid.mark_voxels(
-            [free_voxel], occupied=True
-        )  # mark uav start position as occupied
+        free_cell = self.occupancy_grid.get_random_free_cell()
+        x, y = self.occupancy_grid.cell_to_world(free_cell)
+        z = self.np_random.uniform(self.min_height + 0.5, self.z_size)
+        self.start_pos = np.array([[x, y, z]])  # shape (1, 3). This overwrites the base env start_pos attribute
+        self.occupancy_grid.mark_cells([free_cell], occupied=True)  # mark uav start cell as occupied
 
         # start reset procedure using the base env's methods
         # suppress PyBullet's C-level "argv[0]=" stdout noise on each new Aviary connection -> clean terminal output
@@ -320,7 +315,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.waypoints.reset(self.env, self.np_random)
         self.waypoints.targets = self._create_targets()
 
-        # cleat old obstacle IDs -> recreate new obstacles (after Aviary is initialized and self.env is available) -> reposition obstacles to random locations (they were created at hidden position [0,0,-10])
+        # cleat old obstacle IDs -> recreate new obstacles (after Aviary is initialized and self.env is available)
         self.obstacles.clear()
         self._create_obstacles(num_obstacles=self.num_obstacles)
         self._distribute_obstacles()
@@ -345,9 +340,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         attitude[1] = ang_pos[2]  # (1,) - yaw, rotation position
         attitude[2:5] = lin_vel  # (3,) - body frame linear velocity vector (u, v, w)
         attitude[5] = lin_pos[2]  # (1,) - z position
-        attitude[6:10] = (
-            self.action
-        )  # (4,) - previous action  # TODO check for other methods to capture temporal information of taken actions
+        attitude[6:10] = (self.action)  # (4,) - previous action  # TODO check for other methods to capture temporal information of taken actions
 
         # # create empty array of type float32 -> compute the target deltas with the method from the waypointhandler -> fill array
         # target_deltas = np.empty((1,3), dtype=np.float32)
@@ -365,7 +358,11 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         1. compute termination, truncation, and reward of the current timestep in self.compute_base_term_trunc_reward().
         2. Computes rewards.
 
-        use reward and termination logic from pyflyt env (for now -> # TODO add custom reward function)
+        reward flow:
+        reward = -0.1                          # base env sets beeing alive penalty
+        reward += dense_shaping                # compute_term_trunc_reward adds progress/distance bonuses
+        reward = -100.0  (if collision)        # overwrites everything
+        reward = 100.0   (if target reached)   # also overwrites everything
         """
 
         # call my computation function that overwrites the base env function
@@ -412,12 +409,12 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # x, y, z = lin_pos  # [x, y, z]
 
         # if (
-        #     x < self.voxel_grid.x_min
-        #     or x > self.voxel_grid.x_max
-        #     or y < self.voxel_grid.y_min
-        #     or y > self.voxel_grid.y_max
+        #     x < self.occupancy_grid.x_min
+        #     or x > self.occupancy_grid.x_max
+        #     or y < self.occupancy_grid.y_min
+        #     or y > self.occupancy_grid.y_max
         #     or z
-        #     > self.voxel_grid.z_max  # z constrains the max hight the uav is allowed to fly. collision with the floor is checked above already!
+        #     > self.occupancy_grid.z_max  # z constrains the max hight the uav is allowed to fly. collision with the floor is checked above already!
         # ):
         #     self.reward = -100.0
         #     self.info["out_of_bounds"] = True

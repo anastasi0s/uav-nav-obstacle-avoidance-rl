@@ -64,7 +64,7 @@ def analyse():
         env_kwargs=dict(
             num_targets=1,
             grid_sizes=(10.0, 10.0, 5.0),
-            voxel_size=0.5,
+            cell_size=0.5,
         ),
     )
 
@@ -86,7 +86,7 @@ def test_environment_access():
         env_kwargs=dict(
             num_targets=1,
             grid_sizes=(10.0, 10.0, 5.0),
-            voxel_size=0.5,
+            cell_size=0.5,
         ),
     )
 

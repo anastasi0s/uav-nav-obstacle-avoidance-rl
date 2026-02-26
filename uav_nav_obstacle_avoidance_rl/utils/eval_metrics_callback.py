@@ -779,10 +779,10 @@ class CustomEvalCallback(EvalCallback):
                 fig = go.Figure()
 
                 # Add wireframe box representing the flight space boundaries
-                # Get boundaries from voxel grid
-                x_min, x_max = self.underlying_env.voxel_grid.x_min, self.underlying_env.voxel_grid.x_max
-                y_min, y_max = self.underlying_env.voxel_grid.y_min, self.underlying_env.voxel_grid.y_max
-                z_min, z_max = self.underlying_env.voxel_grid.z_min, self.underlying_env.voxel_grid.z_max
+                # Get boundaries from occupancy grid (XY) and env (Z)
+                x_min, x_max = self.underlying_env.occupancy_grid.x_min, self.underlying_env.occupancy_grid.x_max
+                y_min, y_max = self.underlying_env.occupancy_grid.y_min, self.underlying_env.occupancy_grid.y_max
+                z_min, z_max = 0.0, self.underlying_env.z_size
 
                 # Define the 8 vertices of the box
                 vertices = np.array([

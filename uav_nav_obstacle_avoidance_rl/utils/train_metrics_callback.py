@@ -129,7 +129,7 @@ class TrainMetricsCallback(BaseCallback):
             # extract episode results from Monitor wrapper
             out_of_bounds = info["out_of_bounds"]
             collision = info["collision"]
-            env_complete = info["env_complete"]
+            env_complete = info["env_complete"]  # when all targets reached 
             targets_reached = info["num_targets_reached"]
             episode_reward = info["episode"]["r"]
             episode_length = info["episode"]["l"]

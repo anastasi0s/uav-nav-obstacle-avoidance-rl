@@ -29,7 +29,7 @@ def create_env_with_lidar(
     # Create base environment
     env = VectorVoyagerEnv(
         grid_sizes=(20.0, 20.0, 10.0),
-        voxel_size=2.0,
+        cell_size=2.0,
         min_height=0.5,
         num_targets=3,
         num_obstacles=5,
@@ -166,7 +166,7 @@ def demo_3d_lidar():
     
     env = VectorVoyagerEnv(
         grid_sizes=(20.0, 20.0, 10.0),
-        voxel_size=2.0,
+        cell_size=2.0,
         num_obstacles=5,
         render_mode="human",
         visual_obstacles=True,

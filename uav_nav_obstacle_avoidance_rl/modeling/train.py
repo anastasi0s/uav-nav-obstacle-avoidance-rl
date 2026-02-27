@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import typer
+import yaml
 import wandb
 
 from stable_baselines3 import PPO
@@ -14,41 +17,45 @@ from uav_nav_obstacle_avoidance_rl.utils.train_metrics_callback import TrainMetr
 logger = config.logger
 app = typer.Typer()
 
-# helper: split run.config into sub-dicts
-def split_config(config):
-    env_cfg = {k.removeprefix("env_"): v for k, v in config.items() if k.startswith("env_")}
-    ppo_cfg = {k.removeprefix("ppo_"): v for k, v in config.items() if k.startswith("ppo_")}
-    monitor_info = {"info_keywords": ("out_of_bounds", "collision", "env_complete", "num_targets_reached", "num_obstacles")}
+CONFIG_PATH = Path(__file__).resolve().parent / "config-defaults.yaml"
 
-    return env_cfg, ppo_cfg, monitor_info
+MONITOR_INFO_KEYWORDS = ("out_of_bounds", "collision", "env_complete", "num_targets_reached", "num_obstacles")
+
+
+def load_config(path: Path = CONFIG_PATH) -> dict:
+    """Load experiment config from YAML."""
+    with open(path) as f:
+        return yaml.safe_load(f)
 
 @app.command()
 def run_exp(
-    exp_name: str = "run_X",
-    timesteps: int = 15_000,
-    eval_freq: int = 5_000,
+    exp_name: str,
+    timesteps: int,
+    eval_freq: int,
     n_envs: int = 2,
     exp_analysis: bool = True,
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
-    wandb_tags = [],
+    wandb_tags: list = [],
     ):
     """
     training script with W&B integration for experiment tracking
     """
 
-    # ----- 1. init W&B --------
+    # ----- 1. load config & init W&B --------
 
-    config_overwrite = {"env_num_obstacles": 15}  # overwrite some parameters for testing
+    exp_config = load_config()
     with wandb.init(
         project=wandb_project,
         name=exp_name,
         tags=wandb_tags,
-        config=config_overwrite,
+        config=exp_config,
         dir=config.REPORTS_DIR.as_posix(),
         monitor_gym=True,  # auto-upload videos
         ) as run:
 
-        env_config, ppo_config, monitor_info = split_config(run.config)
+        env_config = dict(run.config["env"])
+        ppo_config = dict(run.config["ppo"])
+        monitor_info = {"info_keywords": MONITOR_INFO_KEYWORDS}
 
         # ----- 2. create environments --------
         # create training environment
@@ -108,14 +115,7 @@ def run_exp(
         model = PPO(
             "MlpPolicy",
             vec_env,
-            learning_rate=ppo_config["learning_rate"],
-            batch_size=ppo_config["batch_size"],
-            n_steps=ppo_config["n_steps"],
-            gamma=ppo_config["gamma"],
-            gae_lambda=ppo_config["gae_lambda"],
-            clip_range=ppo_config["clip_range"],
-            ent_coef=ppo_config["ent_coef"],
-            vf_coef=ppo_config["vf_coef"],
+            **ppo_config,
             verbose=0,
             tensorboard_log=f"{run.dir}/tensorboard",
             seed=config.RANDOM_SEED,  # the seed is passed through the chain: (PPO → Gymnasium → QuadXBaseEnv → Aviary → VectorVoyagerEnv → VoxelGrid)

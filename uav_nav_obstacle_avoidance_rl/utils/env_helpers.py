@@ -22,11 +22,11 @@ def make_flat_voyager(**env_kwargs):
     Args:
         **env_kwargs: Additional arguments for the environment (including num_targets).
             perception_mode: "lidar" or "none" (default "none")
-            lidar_*: any LidarObservationWrapper kwargs, prefixed with "lidar_"
+            lidar: dict of LidarObservationWrapper kwargs
     """
     # extract wrapper-specific parameters (not accepted by VectorVoyagerEnv)
-    lidar_kwargs = {k.removeprefix("lidar_"): env_kwargs.pop(k) for k in list(env_kwargs) if k.startswith("lidar_")}
     perception_mode = env_kwargs.pop("perception_mode")
+    lidar_kwargs = env_kwargs.pop("lidar")
     num_targets = env_kwargs.get("num_targets")
 
     # create base environment

@@ -55,7 +55,7 @@ class OccupancyGrid:
 
     def are_cells_free(self, cell_indices: List[Tuple[int, int]]) -> List[bool]:
         """
-        check if cells are free (not occupied)
+        check if cells are free (not occupied/1)
 
         args:
             cell_indices: list of (i, j) tuples

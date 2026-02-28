@@ -24,13 +24,15 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         min_height: float,
         # waypoint parameters
         num_targets: int,
+        target_distance_range: List[float] | None,
         sparse_reward: bool,
         use_yaw_targets: bool,
         goal_reach_distance: float,
         goal_reach_angle: float,
         # obstacle parameters
-        num_obstacles: int,
-        obstacle_strategy: str, # TODO remove ?
+        num_obstacles_range: List[int],
+        obstacle_shapes: List[str],
+        obstacle_size_range: List[float],
         visual_obstacles: bool,
         # simulation parameters
         max_duration_seconds: float, 
@@ -40,31 +42,31 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         render_mode: None | Literal["human", "rgb_array"],
         render_resolution: Sequence[int],
     ):
-        # init parent class (QuadxBaseEnv)
         super().__init__(
-            start_pos=np.array([start_pos]),  # uav starting at pos [0, 0, 1]. Is randomized and overwritten in reset()
+            start_pos=np.array([start_pos]),            # uav starting at pos [0, 0, 1]. Is randomized and overwritten in reset()
             flight_mode=flight_mode,
             max_duration_seconds=max_duration_seconds,
-            angle_representation=angle_representation,  # its rquired in the base class but its not used in this env
+            angle_representation=angle_representation,  # its required in the base class but its not used in this env
             agent_hz=agent_hz,
             render_mode=render_mode,
             render_resolution=(render_resolution[0], render_resolution[1]),
         )
         # boundary parameters
         self.grid_sizes = grid_sizes
-        self.z_size = grid_sizes[2]  # z dimension stored separately (not in occupancy grid)
+        self.z_size = grid_sizes[2]                     # z dimension stored separately (not in occupancy grid)
         self.cell_size = cell_size
         self.min_height = min_height
         # waypoint parameters
         self.num_targets = num_targets
-        self.target_distance_range = None  # [min_r, max_r] or None for unconstrained; set by curriculum
+        self.target_distance_range = target_distance_range
         self.sparse_reward = sparse_reward
         # obstacle parameters
-        self.obstacle_strategy = obstacle_strategy
-        self.num_obstacles = num_obstacles
+        self.num_obstacles_range = num_obstacles_range
+        self.obstacle_shapes = obstacle_shapes
+        self.obstacle_size_range = obstacle_size_range
         self.visual_obstacles = visual_obstacles
-        self.obstacles = []  # store PyBullet body IDs
-        self.boundary_wall_ids = []  # # store PyBullet body IDs for walls
+        self.obstacles = []                             # store PyBullet body IDs
+        self.boundary_wall_ids = []                     # store PyBullet body IDs for walls
 
         # Note: obstacles are created in the first reset() call when self.env (Aviary/Pybullet client) is available. Pybullet connections from gym are created after env reset()
 
@@ -286,9 +288,9 @@ class VectorVoyagerEnv(QuadXBaseEnv):
     def _spawn_object(
             self, 
             collision_id, 
-            base_position: List[int],
-            base_orientation: List[int]=[0, 0, 0, 1],
-            visual_id=None,
+            base_position: List[float],
+            base_orientation: List[int] | None=None,
+            visual_id=-1,
         ):
         """
         position object body in environment.
@@ -302,41 +304,59 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # create body id
         object_id = self.env.createMultiBody(
             baseMass=0.0,  # Mass=0 -> Static obstacles
-            baseVisualShapeIndex=int(visual_id if visual_id else -1),
+            baseVisualShapeIndex=int(visual_id),
             baseCollisionShapeIndex=int(collision_id),
             basePosition=base_position,
-            baseOrientation=base_orientation,
+            baseOrientation=base_orientation if base_orientation is not None else [0, 0, 0, 1],
             )
         
         self.obstacles.append(object_id)  # collect object ids to destroy the objects at the end of the episode
 
-    def _generate_obstacles(self, num_obstacles: int):
+    def _create_obstacles(self):
         """
-        create obstacles and position them in the environment
-        
+        generate obstacles and position them in the environment
         """
-        for obj in range(num_obstacles):
-            # find a free cell in the 2D occupancy grid
-            free_cell = self.occupancy_grid.get_random_free_cell()
+        # pick random number for obstacles from range
+        self.num_obs = self.np_random.integers(
+            low=self.num_obstacles_range[0],
+            high=self.num_obstacles_range[1]+1,
+        )
+
+        # --- build a set of object body shapes
+        sub_set = max(2, self.num_obs // 3)  # build 3 times less obstacles than self.num_obstacles since they can be reused (better performance)
+        obj_shapes = []
+        for _ in range(sub_set):
+            shape_type = self.np_random.choice(self.obstacle_shapes)
+            size_fraction_np = self.np_random.uniform(
+                low=self.obstacle_size_range[0],
+                high=self.obstacle_size_range[1],
+                size=(3,),
+            )
+            size_fractions = size_fraction_np.tolist()  # cast to list of python floats
+
+            obj_shape = self._create_object_shape(
+                object_type=shape_type,
+                scaled_radius=size_fractions[0],
+                height=1.0,
+                half_extents=size_fractions,
+            )
+            obj_shapes.append(obj_shape)
+
+        # --- place objects from set of shapes on free cells
+        for _ in range(self.num_obs):
+            # sample free cell -> get free position
+            free_cell = self.occupancy_grid.get_random_free_cell()  # TODO implement placment strategy ?
             x, y = self.occupancy_grid.cell_to_world(free_cell)
-            z = self.z_size / 2  # center obstacle vertically (floor-to-ceiling columns)
+            z = self.z_size / 2  # center obstacle vertically (floor-to-ceiling columns)  # TODO adjust hight for shperes and boxes 
             free_position = [x, y, z]
 
-            # reset obstacle position in pybullet
-            self.env.resetBasePositionAndOrientation(
-                object_id,
-                posObj=free_position,
-                ornObj=[0, 0, 0, 1],
-            )
+            # randomly pick a shape from set of generated shapes
+            shape = self.np_random.choice(obj_shapes)
+            collision_id = shape[0]
+            visual_id = shape[1]
 
-            # reset obstacle velocity
-            self.env.resetBaseVelocity(
-                object_id,
-                linearVelocity=[0.0, 0.0, 0.0],
-                angularVelocity=[0.0, 0.0, 0.0],
-            )
-
-            # mark cell as occupied
+            # place obstacle
+            self._spawn_object(collision_id=collision_id, base_position=free_position, visual_id=visual_id)
             self.occupancy_grid.mark_cells([free_cell], occupied=True)
 
     def reset(
@@ -359,39 +379,39 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # reset occupancy grid
         self.occupancy_grid.reset_occupancy()
 
-        # create random UAV start position and set it
+        # --- set random UAV start position
         free_cell = self.occupancy_grid.get_random_free_cell()
         x, y = self.occupancy_grid.cell_to_world(free_cell)
         z = self.np_random.uniform(self.min_height + 0.5, self.z_size)
-        self.start_pos = np.array([[x, y, z]])  # shape (1, 3). This overwrites the base env start_pos attribute
+        self.start_pos = np.array([[x, y, z]])  # this overwrites the base env start_pos attribute
         self.occupancy_grid.mark_cells([free_cell], occupied=True)  # mark uav start cell as occupied
 
-        # start reset procedure using the base env's methods
-        # suppress PyBullet's C-level "argv[0]=" stdout noise on each new Aviary connection -> clean terminal output
+        # --- start reset procedure using the base env's methods
         with open(os.devnull, "w") as devnull:
             old_fd = os.dup(1)
             os.dup2(devnull.fileno(), 1)
             try:
                 super().begin_reset(seed, drone_options=drone_options)  # Aviary is initialized, uav start position is set and all PyBullet bodies (including obstacles) are destroyed. Obstacles are recreated down the line.
             finally:
+                # suppress PyBullet's C-level "argv[0]=" stdout noise on each new Aviary connection -> clean terminal output
                 os.dup2(old_fd, 1)
                 os.close(old_fd)
 
-        # clear old walls -> create new boundary walls
+        # --- create new boundary walls
         self.boundary_wall_ids.clear()
         self._create_boundary_walls()
 
-        # reset waypoint handler, which sets the current target -> create targets manually from voxel grid and overwrite the targets attribute
+        # --- reset waypoint handler, which sets the current target -> create targets manually from voxel grid and overwrite the targets attribute
         self.waypoints.reset(self.env, self.np_random)
         self.waypoints.targets = self._create_targets()
 
-        # cleat old obstacle IDs -> recreate new obstacles (after Aviary is initialized and self.env is available)
+        # --- create new obstacles (after Aviary is initialized and self.env is available)
         self.obstacles.clear()
-        self._generate_obstacles(num_obstacles=self.num_obstacles)
+        self._create_obstacles()
 
         # init tracked metrics
         self.info["num_targets_reached"] = 0
-        self.info["num_obstacles"] = self.num_obstacles
+        self.info["num_obstacles"] = self.num_obs
 
         # finish reset
         super().end_reset()  # registers also all new pybullet bodies
@@ -490,9 +510,18 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         #     self.termination |= True
 
     def set_difficulty(self, stage):
-        """interface method that adjusts the environments difficulty level according to the current stage of the curriculum_callback"""
-
-        # adjust num of spawned obstacles, targets 
-        self.num_obstacles = stage['num_obstacles']
+        """
+        interface method that adjusts the environments difficulty level according to the current stage of the curriculum_callback
+        
+        Expected keys in *stage*:
+            num_obstacles:          int or [min, max]
+            num_targets:            int
+            target_distance_range:  [min_r, max_r] or None
+            obstacle_shapes:        list[str], ["cylinder", "box", "sphere"]
+            obstacle_size_range:    [min, max]  fraction of cell_size
+        """
+        self.num_obstacles_range = stage['num_obstacles']
+        self.obstacle_shapes = stage["obstacle_shapes"]
+        self.obstacle_size_range = stage["obstacle_size_range"]
         self.num_targets = stage['num_targets']  # ??? can policy handle varying num o targets? check state space
         self.target_distance_range = stage['target_distance_range']

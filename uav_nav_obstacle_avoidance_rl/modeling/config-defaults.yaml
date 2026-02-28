@@ -8,6 +8,7 @@ env:
 
   # Waypoints
   num_targets: 1                    # (controlled by curriculum learning)
+  target_distance_range: null       # [min_r, max_r] or None for unconstrained; set by curriculum
   sparse_reward: false
   use_yaw_targets: false            # toggles whether the agent must also align its yaw (heading) to a per‐waypoint target before that waypoint is considered “reached,” and whether yaw error is included in the observation.
   goal_reach_distance: 0.2          # distance in meters within which the target is considered reached
@@ -15,15 +16,16 @@ env:
 
   # Obstacles
   num_obstacles: 0                  # (controlled by curriculum learning)
-  obstacle_strategy: "random"       # random | fixed | curriculum  # XXX remove ?
+  obstacle_shapes: ['cylinder']     # ['cylinder', 'box', 'sphere']
+  obstacle_size_range: [0.5, 0.5]   # [min, max] fraction of cell_size
   visual_obstacles: false           # render meshes (eval only)
 
   # Simulation
   max_duration_seconds: 80.0        # max simulation time of the env
   flight_mode: 5                    # PyFlyt velocity control (u, v, vr, vz)
-  angle_representation: "quaternion"
+  angle_representation: "quaternion" # "euler" or "quaternion"
   agent_hz: 30                      # looprate of the agent to environment interaction
-  render_mode: null                 # "human", "rgb_array", None
+  render_mode: null                 # "human" or "rgb_array" or None
   render_resolution: [480, 480]
 
   # LiDAR / Perception
@@ -52,51 +54,51 @@ curriculum:
   stages:
     - stage: 0
       desc: "Open space — learn flight and navigation"
-      num_obstacles: [0, 0]
-      num_targets: 1
-      target_distance_range: [2.0, 4.0]
+      num_obstacles_range: [0, 0]
       obstacle_shapes: ["cylinder"]
       obstacle_size_range: [0.3, 0.5]
+      num_targets: 1
+      target_distance_range: [2.0, 4.0]
 
     - stage: 1
       desc: "A few obstacles along the flight path"
-      num_obstacles: [1, 3]
-      num_targets: 1
-      target_distance_range: [3.0, 6.0]
+      num_obstacles_range: [1, 3]
       obstacle_shapes: ["cylinder"]
       obstacle_size_range: [0.3, 0.5]
+      num_targets: 1
+      target_distance_range: [3.0, 6.0]
 
     - stage: 2
       desc: "More obstacles, introduce boxes"
-      num_obstacles: [3, 6]
-      num_targets: 1
-      target_distance_range: [3.0, 8.0]
+      num_obstacles_range: [3, 6]
       obstacle_shapes: ["cylinder", "box"]
       obstacle_size_range: [0.2, 0.7]
+      num_targets: 1
+      target_distance_range: [3.0, 8.0]
 
     - stage: 3
       desc: "Dense, mixed shapes and sizes"
-      num_obstacles: [5, 10]
-      num_targets: 1
-      target_distance_range: [4.0, 10.0]
+      num_obstacles_range: [5, 10]
       obstacle_shapes: ["cylinder", "box"]
       obstacle_size_range: [0.2, 0.9]
+      num_targets: 1
+      target_distance_range: [4.0, 10.0]
 
     - stage: 4
       desc: "Dense field, longer distances"
-      num_obstacles: [8, 12]
-      num_targets: 1
-      target_distance_range: [5.0, 12.0]
+      num_obstacles_range: [8, 12]
       obstacle_shapes: ["cylinder", "box"]
       obstacle_size_range: [0.2, 1.0]
+      num_targets: 1
+      target_distance_range: [5.0, 12.0]
 
     - stage: 5
       desc: "Full difficulty — any distance, dense obstacles"
-      num_obstacles: [10, 15]
-      num_targets: 1
-      target_distance_range: null           # unconstrained
+      num_obstacles_range: [10, 15]
       obstacle_shapes: ["cylinder", "box"]
       obstacle_size_range: [0.1, 1.0]
+      num_targets: 1
+      target_distance_range: null           # unconstrained
 
 # ── PPO Hyperparameters ──────────────────────────────────────
 ppo:

@@ -48,7 +48,6 @@ class TrainMetricsCallback(BaseCallback):
         self.train_run_metrics = {
             "success": [],
             "collision": [],
-            "out_of_bounds": [],
         }
 
         # current episode tracking
@@ -122,20 +121,19 @@ class TrainMetricsCallback(BaseCallback):
     def _process_completed_episode(self, info: Dict, env_idx: int = 0):
         """
         process a completed episode and log metrics to W&B
-        - episode_info keys=['out_of_bounds', 'collision', 'env_complete', 'num_targets_reached', 'TimeLimit.truncated', 'episode']
+        - episode_info keys=['collision', 'env_complete', 'num_targets_reached', 'TimeLimit.truncated', 'episode']
         - 'episode' is dic and contains logged info from the Monitor wrapper: r, l, t by default, plus any additional logged information (in this case)
         """
         try:
             # extract episode results from Monitor wrapper
-            out_of_bounds = info["out_of_bounds"]
             collision = info["collision"]
-            env_complete = info["env_complete"]  # when all targets reached 
+            env_complete = info["env_complete"]  # when all targets reached
             targets_reached = info["num_targets_reached"]
             episode_reward = info["episode"]["r"]
             episode_length = info["episode"]["l"]
 
             # check for success = all targets reached, without collisions
-            success = env_complete and not collision and not out_of_bounds
+            success = env_complete and not collision
 
             # calculate custom metrics
             path_length = self._calculate_path_length(
@@ -159,19 +157,16 @@ class TrainMetricsCallback(BaseCallback):
             # store in run-level episode history
             self.train_run_metrics["success"].append(int(success))
             self.train_run_metrics["collision"].append(int(collision))
-            self.train_run_metrics["out_of_bounds"].append(int(out_of_bounds))
 
             # calculate performance ratios using run-level storage
             success_rate = np.mean(self.train_run_metrics["success"][-20:])
             collision_rate = np.mean(self.train_run_metrics["collision"][-20:])
-            out_of_bounds_rate = np.mean(self.train_run_metrics["out_of_bounds"][-20:])
 
             # log metrics to W&B
             episode_metrics = {
                 # performance ratios
                 "train_uav/success_rate_rolling_20ep": success_rate,
                 "train_uav/collision_rate_rolling_20ep": collision_rate,
-                "train_uav/out_of_bounds_rate_rolling_20ep": out_of_bounds_rate,
                 "train_uav/targets_reached": targets_reached,
                 # movement metrics
                 "train_uav/mean_velocity": mean_velocity,

@@ -62,7 +62,6 @@ class CustomEvalCallback(EvalCallback):
             self.current_eval_cycle_data = {
                 "success": [],
                 "collision": [],
-                "out_of_bounds": [],
                 "env_complete": [],
                 "num_targets": [],
                 "targets_reached": [],
@@ -216,7 +215,7 @@ class CustomEvalCallback(EvalCallback):
                     self.current_episode_data["obstacles"] = obstacles_data
                 else:
                     # No obstacles in this episode
-                    self.current_episode_data["obstacles"] = ["empty"]
+                    self.current_episode_data["obstacles"] = None
 
             # at episode start ->
             if self.current_episode_data["target_position"] is None:
@@ -247,21 +246,20 @@ class CustomEvalCallback(EvalCallback):
     def _process_completed_eval_episode(self, info: dict):
         """
         process a completed episode and log metrics to W&B
-        - episode_info keys=['out_of_bounds', 'collision', 'env_complete', 'num_targets_reached', 'TimeLimit.truncated', 'episode']
+        - episode_info keys=['collision', 'env_complete', 'num_targets_reached', 'TimeLimit.truncated', 'episode']
         - 'episode' is dic and contains logged info from the Monitor wrapper: r, l, t by default, plus any additional logged information (in this case)
         """
         try:
             ## GET METRICS
             # capture episode results from Monitor wrapper
             collision = info["collision"]
-            out_of_bounds = info["out_of_bounds"]
             env_complete = info["env_complete"]
             targets_reached = info["num_targets_reached"]
             episode_reward = info["episode"]["r"]
             episode_length = info["episode"]["l"]
 
             # check for success = all targets reached, without collisions
-            success = env_complete and not collision and not out_of_bounds
+            success = env_complete and not collision
             
             # calculate custom metrics
             path_length = self._calculate_path_length(
@@ -285,7 +283,6 @@ class CustomEvalCallback(EvalCallback):
             # store in evaluation-cycle-level episode history
             self.current_eval_cycle_data["success"].append(int(success))
             self.current_eval_cycle_data["collision"].append(int(collision))
-            self.current_eval_cycle_data["out_of_bounds"].append(int(out_of_bounds))
             self.current_eval_cycle_data["env_complete"].append(int(env_complete))
             self.current_eval_cycle_data["targets_reached"].append(targets_reached)
             self.current_eval_cycle_data["num_targets"].append(len(self.current_episode_data["target_position"]))
@@ -353,9 +350,6 @@ class CustomEvalCallback(EvalCallback):
             ),
             "eval_uav/collision_rate": np.mean(
                 self.current_eval_cycle_data["collision"]
-            ),
-            "eval_uav/out_of_bounds_rate": np.mean(
-                self.current_eval_cycle_data["out_of_bounds"]
             ),
             "eval_uav/completion_rate": np.mean(
                 self.current_eval_cycle_data["env_complete"]
@@ -701,10 +695,8 @@ class CustomEvalCallback(EvalCallback):
             # 7. Failure reasons pie chart
             failure_reasons = {
                 "Collision": failure_df["collision"].sum(),
-                "Out of Bounds": failure_df["out_of_bounds"].sum(),
                 "Timeout/Other": len(failure_df)
-                - failure_df["collision"].sum()
-                - failure_df["out_of_bounds"].sum(),
+                - failure_df["collision"].sum(),
             }
 
             # Remove zero categories
@@ -761,9 +753,9 @@ class CustomEvalCallback(EvalCallback):
             picked_episodes = self.rng.choice(len(episodes), size=3, replace=False).tolist()
 
             for idx, ep_idx in enumerate(picked_episodes):
-                positions = self.current_eval_cycle_data["positions_history"][ep_idx][:-1]  # take one position less ([:-1]), so that the trajectory is a oneway and not a closed loop
+                positions = self.current_eval_cycle_data["positions_history"][ep_idx][:-1]  # take one position less ([:-1]), so that the trajectory is a one-way and not a closed loop
                 if len(positions) < 2:
-                    return
+                    continue
 
                 velocities = self.current_eval_cycle_data["velocities_history"][ep_idx][:-1]
                 reward = self.current_eval_cycle_data["episode_rewards"][ep_idx]

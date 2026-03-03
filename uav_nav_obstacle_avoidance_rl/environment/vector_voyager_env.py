@@ -30,16 +30,16 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         goal_reach_distance: float,
         goal_reach_angle: float,
         # obstacle parameters
-        num_obstacles_range: List[int],
-        obstacle_shapes: List[str],
-        obstacle_size_range: List[float],
-        visual_obstacles: bool,
+        num_obstacles_range: List[int] | None,
+        obstacle_shapes: List[str] | None,
+        obstacle_size_range: List[float] | None,
+        visual_obstacles: bool | None,
         # simulation parameters
         max_duration_seconds: float, 
         flight_mode: int,
         angle_representation: Literal["euler", "quaternion"],
         agent_hz: int,
-        render_mode: None | Literal["human", "rgb_array"],
+        render_mode: Literal["human", "rgb_array"] | None,
         render_resolution: Sequence[int],
     ):
         super().__init__(
@@ -65,6 +65,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.obstacle_shapes = obstacle_shapes
         self.obstacle_size_range = obstacle_size_range
         self.visual_obstacles = visual_obstacles
+        self.num_obs = 0                                # for the case num_obstacles_range = [0,0]
         self.obstacles = []                             # store PyBullet body IDs
         self.boundary_wall_ids = []                     # store PyBullet body IDs for walls
 
@@ -314,50 +315,54 @@ class VectorVoyagerEnv(QuadXBaseEnv):
 
     def _create_obstacles(self):
         """
-        generate obstacles and position them in the environment
+        skip or generate obstacles and position them in the environment
         """
-        # pick random number for obstacles from range
-        self.num_obs = self.np_random.integers(
-            low=self.num_obstacles_range[0],
-            high=self.num_obstacles_range[1]+1,
-        )
-
-        # --- build a set of object body shapes
-        sub_set = max(2, self.num_obs // 3)  # build 3 times less obstacles than self.num_obstacles since they can be reused (better performance)
-        obj_shapes = []
-        for _ in range(sub_set):
-            shape_type = self.np_random.choice(self.obstacle_shapes)
-            size_fraction_np = self.np_random.uniform(
-                low=self.obstacle_size_range[0],
-                high=self.obstacle_size_range[1],
-                size=(3,),
+        if self.num_obstacles_range is None:
+            # no obstacles created
+            self.num_obs = 0
+        else:
+            # pick random number for obstacles from range
+            self.num_obs = self.np_random.integers(
+                low=self.num_obstacles_range[0],
+                high=self.num_obstacles_range[1]+1,
             )
-            size_fractions = size_fraction_np.tolist()  # cast to list of python floats
 
-            obj_shape = self._create_object_shape(
-                object_type=shape_type,
-                scaled_radius=size_fractions[0],
-                height=1.0,
-                half_extents=size_fractions,
-            )
-            obj_shapes.append(obj_shape)
+            # --- build a set of object body shapes
+            sub_set = max(2, self.num_obs // 3)  # build 3 times less obstacles than self.num_obstacles since they can be reused (better performance)
+            obj_shapes = []
+            for _ in range(sub_set):
+                shape_type = self.np_random.choice(self.obstacle_shapes)
+                size_fraction_np = self.np_random.uniform(
+                    low=self.obstacle_size_range[0],
+                    high=self.obstacle_size_range[1],
+                    size=(3,),
+                )
+                size_fractions = size_fraction_np.tolist()  # cast to list of python floats
 
-        # --- place objects from set of shapes on free cells
-        for _ in range(self.num_obs):
-            # sample free cell -> get free position
-            free_cell = self.occupancy_grid.get_random_free_cell()  # TODO implement placment strategy ?
-            x, y = self.occupancy_grid.cell_to_world(free_cell)
-            z = self.z_size / 2  # center obstacle vertically (floor-to-ceiling columns)  # TODO adjust hight for shperes and boxes 
-            free_position = [x, y, z]
+                obj_shape = self._create_object_shape(
+                    object_type=shape_type,
+                    scaled_radius=size_fractions[0],
+                    height=1.0,
+                    half_extents=size_fractions,
+                )
+                obj_shapes.append(obj_shape)
 
-            # randomly pick a shape from set of generated shapes
-            shape = self.np_random.choice(obj_shapes)
-            collision_id = shape[0]
-            visual_id = shape[1]
+            # --- place objects from set of shapes on free cells
+            for _ in range(self.num_obs):
+                # sample free cell -> get free position
+                free_cell = self.occupancy_grid.get_random_free_cell()  # TODO implement placment strategy ?
+                x, y = self.occupancy_grid.cell_to_world(free_cell)
+                z = self.z_size / 2  # center obstacle vertically (floor-to-ceiling columns)  # TODO adjust hight for shperes and boxes 
+                free_position = [x, y, z]
 
-            # place obstacle
-            self._spawn_object(collision_id=collision_id, base_position=free_position, visual_id=visual_id)
-            self.occupancy_grid.mark_cells([free_cell], occupied=True)
+                # randomly pick a shape from set of generated shapes
+                shape = self.np_random.choice(obj_shapes)
+                collision_id = shape[0]
+                visual_id = shape[1]
+
+                # place obstacle
+                self._spawn_object(collision_id=collision_id, base_position=free_position, visual_id=visual_id)
+                self.occupancy_grid.mark_cells([free_cell], occupied=True)
 
     def reset(
         self,
@@ -450,15 +455,15 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         reward flow:
         reward = -0.1                          # base env sets beeing alive penalty
         reward += dense_shaping                # compute_term_trunc_reward adds progress/distance bonuses
-        reward = -100.0  (if collision)        # overwrites everything
-        reward = 100.0   (if target reached)   # also overwrites everything
+        reward = -100.0  (if collision)        # 
+        reward = 100.0   (if target reached)   # overwrites everything
         """
 
         # call my computation function that overwrites the base env function
         self.compute_base_term_trunc_reward()
 
         # if not using sparse reward, add bonus rewards related to waypoint progression
-        if not self.sparse_reward:
+        if not self.sparse_reward:  # add: and not self.termination
             self.reward += max(3.0 * self.waypoints.progress_to_next_target, 0.0)
             self.reward += 0.1 / self.waypoints.distance_to_next_target
 
@@ -509,7 +514,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         #     self.info["out_of_bounds"] = True
         #     self.termination |= True
 
-    def set_difficulty(self, stage):
+    def set_stage(self, stage):
         """
         interface method that adjusts the environments difficulty level according to the current stage of the curriculum_callback
         
@@ -520,8 +525,8 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             obstacle_shapes:        list[str], ["cylinder", "box", "sphere"]
             obstacle_size_range:    [min, max]  fraction of cell_size
         """
-        self.num_obstacles_range = stage['num_obstacles']
+        self.num_obstacles_range = stage['num_obstacles_range']
         self.obstacle_shapes = stage["obstacle_shapes"]
         self.obstacle_size_range = stage["obstacle_size_range"]
-        self.num_targets = stage['num_targets']  # ??? can policy handle varying num o targets? check state space
+        self.num_targets = stage['num_targets']
         self.target_distance_range = stage['target_distance_range']

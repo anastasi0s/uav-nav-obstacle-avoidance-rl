@@ -1,25 +1,26 @@
 from pathlib import Path
 
 import typer
-import yaml
 import wandb
-
+import yaml
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from wandb.integration.sb3 import WandbCallback
 
 from uav_nav_obstacle_avoidance_rl import config
-from uav_nav_obstacle_avoidance_rl.utils import env_helpers
 from uav_nav_obstacle_avoidance_rl.test import base_env_test
+from uav_nav_obstacle_avoidance_rl.utils import env_helpers
+from uav_nav_obstacle_avoidance_rl.utils.curriculum_callback import CurriculumCallback
 from uav_nav_obstacle_avoidance_rl.utils.eval_metrics_callback import CustomEvalCallback
 from uav_nav_obstacle_avoidance_rl.utils.train_metrics_callback import TrainMetricsCallback
+
 
 logger = config.logger
 app = typer.Typer()
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config-defaults.yaml"
 
-MONITOR_INFO_KEYWORDS = ("out_of_bounds", "collision", "env_complete", "num_targets_reached", "num_obstacles")
+MONITOR_INFO_KEYWORDS = ("collision", "env_complete", "num_targets_reached", "num_obstacles")
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict:
@@ -35,7 +36,7 @@ def run_exp(
     n_envs: int = 2,
     exp_analysis: bool = True,
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
-    wandb_tags: list = [],
+    wandb_tags: list | None = None,
     ):
     """
     training script with W&B integration for experiment tracking
@@ -55,6 +56,7 @@ def run_exp(
 
         env_config = dict(run.config["env"])
         ppo_config = dict(run.config["ppo"])
+        curriculum_config = dict(run.config["curriculum"])
         monitor_info = {"info_keywords": MONITOR_INFO_KEYWORDS}
 
         # ----- 2. create environments --------
@@ -92,24 +94,28 @@ def run_exp(
             verbose=0,
         )
 
-        # calculate eval frequency based on parallel environments -> eval_freq = actual time-steps
-        eval_freq = eval_freq // n_envs
+        eval_freq = eval_freq // n_envs  # calculate eval frequency based on parallel environments -> eval_freq = actual time-steps
         # add custom evaluation metrics callback
         eval_callback = CustomEvalCallback(
             vec_env_eval,
             best_model_save_path=f"{run.dir}/models",
             log_path=run.dir,
             eval_freq=eval_freq,
-            n_eval_episodes=40,
+            n_eval_episodes=30,
             deterministic=True,
             render=False,
             verbose=0,
-            exp_analysis=exp_analysis,
+            exp_analysis=exp_analysis,        
         )
         
         callbacks.append(wandb_callback)
         callbacks.append(train_callback)
         callbacks.append(eval_callback)
+
+        # add curriculum callback
+        if curriculum_config.pop('enabled', False):
+            curriculum_callback = CurriculumCallback(**curriculum_config)
+            callbacks.append(curriculum_callback)
 
         # ----- 4. define and train model --------
         model = PPO(
@@ -126,6 +132,7 @@ def run_exp(
             total_timesteps=timesteps,
             callback=callbacks,
             progress_bar=True,
+            log_interval=10,
         )
 
 

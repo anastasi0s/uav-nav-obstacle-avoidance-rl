@@ -15,12 +15,12 @@ env:
   goal_reach_angle: 0.1             # radians
 
   # Obstacles
-  num_obstacles: 0                  # (controlled by curriculum learning)
+  num_obstacles_range: [0, 3]       # (controlled by curriculum learning)
   obstacle_shapes: ['cylinder']     # ['cylinder', 'box', 'sphere']
   obstacle_size_range: [0.5, 0.5]   # [min, max] fraction of cell_size
   visual_obstacles: false           # render meshes (eval only)
 
-  # Simulation
+  # Simulation --- with agent_hz=30 and 80s/episode, an episode is up to ~2400 steps
   max_duration_seconds: 80.0        # max simulation time of the env
   flight_mode: 5                    # PyFlyt velocity control (u, v, vr, vz)
   angle_representation: "quaternion" # "euler" or "quaternion"
@@ -50,15 +50,15 @@ curriculum:
   advance_patience: 5
   regress_threshold: 0.4
   regress_patience: 3
-  window_size: 10000
+  window_size: 40                   # episodes: 2400steps/episode
   stages:
     - stage: 0
       desc: "Open space — learn flight and navigation"
-      num_obstacles_range: [0, 0]
-      obstacle_shapes: ["cylinder"]
-      obstacle_size_range: [0.3, 0.5]
-      num_targets: 1
-      target_distance_range: [2.0, 4.0]
+      num_obstacles_range: null
+      obstacle_shapes: null
+      obstacle_size_range: null
+      num_targets: 1                # NOTE!!! policy can't handle varying num of targets -> adjust observations before changing num of targets mid-training
+      target_distance_range: null
 
     - stage: 1
       desc: "A few obstacles along the flight path"
@@ -78,8 +78,8 @@ curriculum:
 
     - stage: 3
       desc: "Dense, mixed shapes and sizes"
-      num_obstacles_range: [5, 10]
-      obstacle_shapes: ["cylinder", "box"]
+      num_obstacles_range: [6, 10]
+      obstacle_shapes: ["cylinder", "box", "sphere"]
       obstacle_size_range: [0.2, 0.9]
       num_targets: 1
       target_distance_range: [4.0, 10.0]
@@ -87,7 +87,7 @@ curriculum:
     - stage: 4
       desc: "Dense field, longer distances"
       num_obstacles_range: [8, 12]
-      obstacle_shapes: ["cylinder", "box"]
+      obstacle_shapes: ["cylinder", "box", "sphere"]
       obstacle_size_range: [0.2, 1.0]
       num_targets: 1
       target_distance_range: [5.0, 12.0]
@@ -95,8 +95,8 @@ curriculum:
     - stage: 5
       desc: "Full difficulty — any distance, dense obstacles"
       num_obstacles_range: [10, 15]
-      obstacle_shapes: ["cylinder", "box"]
-      obstacle_size_range: [0.1, 1.0]
+      obstacle_shapes: ["cylinder", "box", "sphere"]
+      obstacle_size_range: [0.2, 1.0]
       num_targets: 1
       target_distance_range: null           # unconstrained
 

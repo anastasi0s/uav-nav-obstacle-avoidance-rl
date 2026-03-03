@@ -81,7 +81,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
             use_yaw_targets=use_yaw_targets,
             goal_reach_distance=goal_reach_distance,
             goal_reach_angle=goal_reach_angle,
-            flight_dome_size=0.0,  # this is obsolete since _create_targets() is used for target setting
+            flight_dome_size=5,  # dummy value; targets are overwritten by _create_targets() after reset()
             min_height=min_height,
             np_random=self.np_random,
         )

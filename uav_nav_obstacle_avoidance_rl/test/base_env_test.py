@@ -1,8 +1,9 @@
 import numpy as np
 import typer
 
-from uav_nav_obstacle_avoidance_rl.config import logger
+from uav_nav_obstacle_avoidance_rl import config
 
+logger = config.logger
 app = typer.Typer()
 
 

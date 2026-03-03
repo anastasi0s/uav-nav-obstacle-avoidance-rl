@@ -147,23 +147,21 @@ class CurriculumCallback(BaseCallback):
         logger.info(f"[Curriculum] Stage Transition: {old_idx} → {new_idx} ")
 
         # log wandb
-        try:
-            wandb.log({"curriculum/stage": new_idx,}, step=self.num_timesteps,)
-        except wandb.Error:
-            pass
+        wandb.log({"curriculum/stage": new_idx}, step=self.num_timesteps)
 
     def _log_metrics(self, success_rate):
         """Log curriculum metrics to W&B"""
-        try:
-            wandb.log(
-                {
-                    "curriculum/stage": self.current_stage_idx,
-                    "curriculum/success_rate": success_rate,
-                    "curriculum/window_size": len(self.success_window),
-                    "curriculum/advance_streak": self._advance_streak,
-                    "curriculum/regress_streak": self._regress_streak,
-                },
-                step=self.num_timesteps,
-            )
-        except wandb.Error:
-            pass
+        wandb.log(
+            {
+                "curriculum/stage": self.current_stage_idx,
+                "curriculum/success_rate": success_rate,
+                "curriculum/window_size": len(self.success_window),
+                "curriculum/advance_streak": self._advance_streak,
+                "curriculum/regress_streak": self._regress_streak,
+            },
+            step=self.num_timesteps,
+        )
+        logger.debug(
+            f"[Curriculum] stage={self.current_stage_idx} success_rate={success_rate:.3f} "
+            f"advance_streak={self._advance_streak} regress_streak={self._regress_streak}"
+        )

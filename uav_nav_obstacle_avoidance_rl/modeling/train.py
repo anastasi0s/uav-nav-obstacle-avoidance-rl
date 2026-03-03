@@ -30,13 +30,13 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
 
 @app.command()
 def run_exp(
-    exp_name: str,
-    timesteps: int,
-    eval_freq: int,
+    exp_name: str = "exp_0",
+    timesteps: int = 500000,
+    eval_freq: int = 100000,
     n_envs: int = 2,
     exp_analysis: bool = True,
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
-    wandb_tags: list | None = None,
+    wandb_tags: list[str] | None = None,
     ):
     """
     training script with W&B integration for experiment tracking

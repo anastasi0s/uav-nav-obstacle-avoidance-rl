@@ -45,12 +45,12 @@ env:
 # When curriculum is disabled, env defaults above are used directly.
 # When enabled, each stage overrides env defaults for difficulty parameters.
 curriculum:
-  enabled: false
+  enabled: true
   advance_threshold: 0.8
   advance_patience: 5
   regress_threshold: 0.4
   regress_patience: 3
-  window_size: 40                   # episodes: 2400steps/episode
+  window_size: 15                   # episodes: window_size * (2400steps/episode) =
   stages:
     - stage: 0
       desc: "Open space — learn flight and navigation"

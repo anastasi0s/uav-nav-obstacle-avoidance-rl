@@ -1,16 +1,16 @@
-import numpy as np
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecVideoRecorder
 
-from uav_nav_obstacle_avoidance_rl.config import logger
 from uav_nav_obstacle_avoidance_rl.environment.cam_wrapper import ThirdPersonCamWrapper
+from uav_nav_obstacle_avoidance_rl.environment.flaten_wrapper import (
+    FlattenVectorVoyagerEnv,
+)
+from uav_nav_obstacle_avoidance_rl.environment.lidar_observation_wrapper import (
+    LidarFlattenWrapper,
+    LidarObservationWrapper,
+)
 from uav_nav_obstacle_avoidance_rl.environment.vector_voyager_env import (
     VectorVoyagerEnv,
-)
-from uav_nav_obstacle_avoidance_rl.environment.flaten_wrapper import FlattenVectorVoyagerEnv
-from uav_nav_obstacle_avoidance_rl.environment.lidar_observation_wrapper import (
-    LidarObservationWrapper,
-    LidarFlattenWrapper,
 )
 
 

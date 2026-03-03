@@ -9,6 +9,7 @@ from uav_nav_obstacle_avoidance_rl import config
 
 logger = config.logger
 
+
 class CurriculumCallback(BaseCallback):
     """
     Args:
@@ -25,9 +26,9 @@ class CurriculumCallback(BaseCallback):
         advance_threshold: float,
         regress_threshold: float,
         advance_patience: int,
-        regress_patienxe: int,
+        regress_patience: int,
         window_size: int,
-        verbose=0,
+        verbose: int,
     ) -> None:
         super().__init__(verbose)
         # Those variables will be accessible in the callback
@@ -57,7 +58,7 @@ class CurriculumCallback(BaseCallback):
         self.advance_threshold = advance_threshold
         self.regress_threshold = regress_threshold
         self.advance_patience = advance_patience
-        self.regress_patienxe = regress_patienxe
+        self.regress_patience = regress_patience
         
         # rolling success window
         self.window_size = window_size
@@ -106,7 +107,7 @@ class CurriculumCallback(BaseCallback):
                 # advance if patience is met
                 if self.current_stage_idx >= self.num_stages - 1:
                     # reached max stage
-                    logger.info("[Curriculum] Already at final stage — cannot advance.")
+                    logger.debug("[Curriculum] Already at final stage — cannot advance.")
                     return
                 old_idx = self.current_stage_idx
                 self.current_stage_idx += 1
@@ -115,11 +116,11 @@ class CurriculumCallback(BaseCallback):
         elif success_rate <= self.regress_threshold:
             self._regress_streak += 1
             self._advance_streak = 0
-            if self._regress_streak >= self.regress_patienxe:
+            if self._regress_streak >= self.regress_patience:
                 # regress if patience is met
                 if self.current_stage_idx <= 0:
                     # reached min stage
-                    logger.info("[Curriculum] Already at lowest stage — cannot regress.")
+                    logger.debug("[Curriculum] Already at lowest stage — cannot regress.")
                     return
                 old_idx = self.current_stage_idx
                 self.current_stage_idx -= 1
@@ -144,7 +145,7 @@ class CurriculumCallback(BaseCallback):
             # triggers reset on all sub envs, ensuring all new episodes start under new difficulty
             self.training_env.env_method('reset')
 
-        logger.info(f"[Curriculum] Stage Transition: {old_idx} → {new_idx} ")
+        logger.info(f"[Curriculum] Stage Transition: {old_idx} → {new_idx}")
 
         # log wandb
         wandb.log({"curriculum/stage": new_idx}, step=self.num_timesteps)

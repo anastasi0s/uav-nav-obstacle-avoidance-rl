@@ -15,38 +15,40 @@ RANDOM_SEED = 319
 # PATHS ------------------------------------------------------------------------------------------------- #
 PROJ_ROOT = Path(__file__).resolve().parents[1]
 REPORTS_DIR = PROJ_ROOT / "reports"
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+LOG_FILE = REPORTS_DIR / "run.log"
 
 # LOGGING ------------------------------------------------------------------------------------------------- #
 LOG_LEVEL = "INFO"  # Options: 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
-LOG_FILE = Path("run.log")
 
 # set up logging with both Rich console and file handlers
 console = Console()
 install(show_locals=True)  # get any traceback rendered with Rich
 
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        RichHandler(
-            console=console,
-            show_time=True,
-            show_level=True,
-            show_path=True,
-            markup=True,
-            rich_tracebacks=True,
-            tracebacks_show_locals=True,
-        ),
-        logging.FileHandler(
-            LOG_FILE,
-            encoding="utf-8",
-            mode="a",  # append mode
-        ),
-    ],
+LOGGER_NAME = "uav_nav_rl"
+
+logger = logging.getLogger(LOGGER_NAME)
+logger.setLevel(getattr(logging, LOG_LEVEL))
+logger.propagate = False  # don't let root logger interfere
+
+# Rich console handler
+logger.addHandler(
+    RichHandler(
+        console=console,
+        show_time=True,
+        show_level=True,
+        show_path=True,
+        markup=True,
+        rich_tracebacks=True,
+        tracebacks_show_locals=True,
+    )
 )
 
-# get logger instance
-logger = logging.getLogger(__name__)
+# File handler
+file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8", mode="a")
+file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+logger.addHandler(file_handler)
 
 # log the project root path
 # logger.info(f"PROJ_ROOT path is: {PROJ_ROOT}")

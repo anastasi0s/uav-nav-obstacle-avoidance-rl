@@ -14,9 +14,8 @@ from uav_nav_obstacle_avoidance_rl.utils.curriculum_callback import CurriculumCa
 from uav_nav_obstacle_avoidance_rl.utils.eval_metrics_callback import CustomEvalCallback
 from uav_nav_obstacle_avoidance_rl.utils.train_metrics_callback import TrainMetricsCallback
 
-
-logger = config.logger
 app = typer.Typer()
+logger = config.logger
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config-defaults.yaml"
 
@@ -37,6 +36,7 @@ def run_exp(
     exp_analysis: bool = True,
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     wandb_tags: list[str] | None = None,
+    verbose: int = 0,
     ):
     """
     training script with W&B integration for experiment tracking
@@ -64,7 +64,7 @@ def run_exp(
         vec_env = make_vec_env(
             env_helpers.make_flat_voyager,
             n_envs=n_envs,
-            env_kwargs={**env_config, "visual_obstacles": False},  # train without visual obstacles
+            env_kwargs={**env_config, "visual_obstacles": False},  # never train with visual obstacles
             monitor_kwargs=monitor_info,
             )
         
@@ -84,14 +84,14 @@ def run_exp(
         # add W&B callback
         wandb_callback = WandbCallback(
             # gradient_save_freq=1000,
-            verbose=0,
+            verbose=verbose,
         )
 
         # add custom train metrics callback
         train_callback = TrainMetricsCallback(
             run_path=run.dir,
             # model_save_path=f"{run.dir}/models",
-            verbose=0,
+            verbose=verbose,
         )
 
         eval_freq = eval_freq // n_envs  # calculate eval frequency based on parallel environments -> eval_freq = actual time-steps
@@ -104,8 +104,8 @@ def run_exp(
             n_eval_episodes=30,
             deterministic=True,
             render=False,
-            verbose=0,
-            exp_analysis=exp_analysis,        
+            verbose=verbose,
+            exp_analysis=exp_analysis,
         )
         
         callbacks.append(wandb_callback)
@@ -114,7 +114,7 @@ def run_exp(
 
         # add curriculum callback
         if curriculum_config.pop('enabled', False):
-            curriculum_callback = CurriculumCallback(**curriculum_config)
+            curriculum_callback = CurriculumCallback(**curriculum_config, verbose=verbose)
             callbacks.append(curriculum_callback)
 
         # ----- 4. define and train model --------
@@ -122,7 +122,7 @@ def run_exp(
             "MlpPolicy",
             vec_env,
             **ppo_config,
-            verbose=0,
+            verbose=verbose,
             tensorboard_log=f"{run.dir}/tensorboard",
             seed=config.RANDOM_SEED,  # the seed is passed through the chain: (PPO → Gymnasium → QuadXBaseEnv → Aviary → VectorVoyagerEnv → VoxelGrid)
         )

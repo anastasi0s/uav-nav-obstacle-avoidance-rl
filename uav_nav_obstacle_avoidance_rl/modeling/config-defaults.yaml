@@ -50,7 +50,7 @@ curriculum:
   advance_patience: 5
   regress_threshold: 0.4
   regress_patience: 3
-  window_size: 15                   # episodes: window_size * (2400steps/episode) =
+  window_size: 20                   # episodes: window_size * (2400steps/episode) =
   stages:
     - stage: 0
       desc: "Open space — learn flight and navigation"

@@ -1,6 +1,7 @@
 .venv
 models/
 references/
+notebooks/
 reports/
 assets/
 drafts/

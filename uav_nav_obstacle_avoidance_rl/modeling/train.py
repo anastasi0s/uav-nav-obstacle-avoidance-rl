@@ -17,12 +17,10 @@ from uav_nav_obstacle_avoidance_rl.utils.train_metrics_callback import TrainMetr
 app = typer.Typer()
 logger = config.logger
 
-CONFIG_PATH = Path(__file__).resolve().parent / "config-defaults.yaml"
-
 MONITOR_INFO_KEYWORDS = ("collision", "env_complete", "num_targets_reached", "num_obstacles")
 
 
-def load_config(path: Path = CONFIG_PATH) -> dict:
+def load_config(path: Path = config.EXP_CONFIG_PATH) -> dict:
     """Load experiment config from YAML."""
     with open(path) as f:
         return yaml.safe_load(f)
@@ -55,6 +53,7 @@ def run_exp(
         config=exp_config,
         dir=config.REPORTS_DIR.as_posix(),
         monitor_gym=True,  # auto-upload videos
+        settings=wandb.Settings(x_disable_stats=True)
         ) as run:
 
         env_config = dict(run.config["env"])
@@ -63,11 +62,11 @@ def run_exp(
         monitor_info = {"info_keywords": MONITOR_INFO_KEYWORDS}
 
         # ----- 2. create environments --------
-        # create training environment
+        # create training environment (never visual obstacles for performance)
         vec_env = make_vec_env(
             env_helpers.make_flat_voyager,
             n_envs=n_envs,
-            env_kwargs={**env_config, "visual_obstacles": False},  # never train with visual obstacles
+            env_kwargs={**env_config, "visual_obstacles": False},
             monitor_kwargs=monitor_info,
             )
         
@@ -117,7 +116,7 @@ def run_exp(
 
         # add curriculum callback
         if curriculum_config.pop('enabled', False):
-            curriculum_callback = CurriculumCallback(**curriculum_config, verbose=verbose)
+            curriculum_callback = CurriculumCallback(**curriculum_config, verbose=verbose, eval_env=vec_env_eval)
             callbacks.append(curriculum_callback)
 
         # ----- 4. define and train model --------

@@ -29,6 +29,7 @@ class CurriculumCallback(BaseCallback):
         regress_patience: int,
         window_size: int,
         verbose: int,
+        eval_env=None,
     ) -> None:
         super().__init__(verbose)
         # Those variables will be accessible in the callback
@@ -49,6 +50,8 @@ class CurriculumCallback(BaseCallback):
         # # to have access to the parent object
         # self.parent = None  # type: Optional[BaseCallback]
         
+        self.eval_env = eval_env  # sync difficult with eval env
+
         # stage definitions
         self.stages = stages
         self.num_stages = len(stages)
@@ -136,9 +139,13 @@ class CurriculumCallback(BaseCallback):
         self._regress_streak = 0
         self.success_window.clear()  # episodes from old difficulty are meaningless for evaluations in new stage
         
-        # apply stage to all envs
+        # apply stage to all train envs
         stage = self.stages[new_idx]
         self.training_env.env_method('set_stage', stage)
+
+        # sync eval env to same difficulty
+        if self.eval_env is not None:
+            self.eval_env.env_method('set_stage', stage)
 
         # reset envs
         if force_reset:

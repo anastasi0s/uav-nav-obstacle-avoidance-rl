@@ -14,10 +14,14 @@ RANDOM_SEED = 319
 
 # PATHS ------------------------------------------------------------------------------------------------- #
 PROJ_ROOT = Path(__file__).resolve().parents[1]
+
 REPORTS_DIR = PROJ_ROOT / "reports"
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 LOG_FILE = REPORTS_DIR / "run.log"
+
+EXP_CONFIG_PATH = PROJ_ROOT / "uav_nav_obstacle_avoidance_rl" / "modeling" / "config-defaults.yaml"
+
 
 # LOGGING ------------------------------------------------------------------------------------------------- #
 LOG_LEVEL = "INFO"  # Options: 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'

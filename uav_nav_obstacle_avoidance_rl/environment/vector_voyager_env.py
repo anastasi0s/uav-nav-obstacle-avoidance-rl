@@ -65,6 +65,8 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.obstacle_shapes = obstacle_shapes
         self.obstacle_size_range = obstacle_size_range
         self.visual_obstacles = visual_obstacles
+        self.obstacle_placement: Literal["random", "around_target", "along_path"] = "random"
+        self.obstacle_distance_range: List[float] | None = None  # used with "around_target" placement
         self.num_obs = 0                                # for the case num_obstacles_range = [0,0]
         self.obstacles = []                             # store PyBullet body IDs
         self.boundary_wall_ids = []                     # store PyBullet body IDs for walls
@@ -117,252 +119,6 @@ class VectorVoyagerEnv(QuadXBaseEnv):
                 ),
             }
         )
-
-    # called in reset()
-    def _create_targets(self) -> np.ndarray:
-        """create waypoint targets within a square annulus around the UAV start position.
-        Falls back to random free cell placement when target_distance_range is None.
-        """
-        og = self.occupancy_grid
-        start_x, start_y = self.start_pos[0, 0], self.start_pos[0, 1]
-        start_i, start_j = og.world_to_cell(start_x, start_y)
-
-        targets = []
-        for _ in range(self.num_targets):
-            if self.target_distance_range is None:
-                free_cell = og.get_random_free_cell()
-            else:
-                r_min, r_max = self.target_distance_range
-                # convert radii from world units to cell units
-                cells_inner = int(np.floor(r_min / og.cell_size))
-                cells_outer = int(np.ceil(r_max / og.cell_size))
-
-                # outer square bounds, clamped to grid
-                i_lo = max(start_i - cells_outer, 0)
-                i_hi = min(start_i + cells_outer, og.nx - 1)
-                j_lo = max(start_j - cells_outer, 0)
-                j_hi = min(start_j + cells_outer, og.ny - 1)
-
-                # all cell indices inside the outer square
-                ii, jj = np.mgrid[i_lo:i_hi + 1, j_lo:j_hi + 1]
-                # exclude inner square (cells too close to start)
-                outside_inner = (np.abs(ii - start_i) >= cells_inner) | (np.abs(jj - start_j) >= cells_inner)
-                # exclude occupied cells
-                free = ~og.grid[i_lo:i_hi + 1, j_lo:j_hi + 1]
-
-                valid_mask = outside_inner & free
-                valid_cells = np.argwhere(valid_mask)
-
-                if len(valid_cells) == 0:
-                    raise ValueError("No free cells in target distance range")
-
-                pick = self.np_random.integers(len(valid_cells))
-                # convert local sub-grid indices back to global grid indices
-                free_cell = (int(valid_cells[pick, 0] + i_lo), int(valid_cells[pick, 1] + j_lo))
-
-            x, y = og.cell_to_world(free_cell)
-            z = self.np_random.uniform(self.min_height + 0.5, self.z_size)
-            targets.append([x, y, z])
-            og.mark_cells([free_cell], occupied=True)
-
-        return np.array(targets, dtype=np.float32)
-
-    # called in reset()
-    def _create_boundary_walls(self):
-        """
-        create invisavle collision walls at env boundaries so that lidar rays can detect them
-        """
-        og = self.occupancy_grid
-        half_thickness = 0.01
-        z_half = self.z_size / 2
-
-        # (position, halfExtents) for each wall
-        walls = [
-            # -x wall
-            (
-                [og.x_min - half_thickness, 0.0, z_half],
-                [half_thickness, og.y_size / 2, z_half],
-            ),
-            # +x wall
-            (
-                [og.x_max + half_thickness, 0.0, z_half],
-                [half_thickness, og.y_size / 2, z_half],
-            ),
-            # -y wall
-            (
-                [0.0, og.y_min - half_thickness, z_half],
-                [og.x_size / 2, half_thickness, z_half],
-            ),
-            # +y wall
-            (
-                [0.0, og.y_max + half_thickness, z_half],
-                [og.x_size / 2, half_thickness, z_half],
-            ),
-            # ceiling
-            (
-                [0.0, 0.0, self.z_size + half_thickness],
-                [og.x_size / 2, og.y_size / 2, half_thickness],
-            ),
-        ]
-
-        for pos, half_extents in walls:
-            col_id = self.env.createCollisionShape(
-                shapeType=self.env.GEOM_BOX,
-                halfExtents=half_extents,
-            )
-            body_id = self.env.createMultiBody(
-                baseMass=0.0,
-                baseCollisionShapeIndex=int(col_id),
-                basePosition=pos,
-                baseOrientation=[0, 0, 0, 1],
-            )
-
-            self.boundary_wall_ids.append(body_id)
-
-    def _create_object_shape(
-            self, 
-            object_type: Literal['cylinder', 'sphere', 'box'], 
-            scaled_radius: float=1.0, 
-            height: float=1.0,
-            half_extents: Optional[List[float]]=None,  # define half sizes to get full sized objects 
-        ):
-        """
-        create the object shapes that can be spawned with _spawn_object() on multiple positions, without having to recreate the shapes
-        Args:
-            object_type:    'cylinder' or 'box' or sphere
-            scaled_radius:  fraction of *cell_size* used as cylinder radius [0-1]
-            height:         fraction of environment z-height  (1.0 = floor -> ceiling) [0-1]
-            half_extents:   [sx, sy, sz] — fractions of cell_size (xy) and
-                            grid z-height (z) used as **full-size** scalars;
-                            the method halves them for PyBullet's halfExtents. [0-1]
-
-        Returns:
-            (collision_id, visual_id)   visual_id is -1 when visual_obstacles=False
-        """
-        visual_id = -1  # PyBullet convention: no visual shape
-        if object_type == 'cylinder':
-            r = self.cell_size * scaled_radius
-            h = self.grid_sizes[-1] * height
-            
-            # create collision shape
-            collision_id = self.env.createCollisionShape(
-                shapeType=self.env.GEOM_CYLINDER, radius=r, height=h,
-            )
-            if self.visual_obstacles:
-                # create visual shape
-                visual_id = self.env.createVisualShape(
-                    shapeType=self.env.GEOM_CYLINDER, radius=r, length=h,  # obstacles have full hight of the environment (from ground to sealing)
-                    rgbaColor=[0.8, 0.2, 0.2, 1.0],
-                )
-
-        elif object_type == 'sphere':
-            r = self.cell_size * scaled_radius
-            collision_id = self.env.createCollisionShape(
-                shapeType=self.env.GEOM_SPHERE, radius=r,
-            )
-
-            if self.visual_obstacles:
-                visual_id = self.env.createVisualShape(
-                    shapeType=self.env.GEOM_SPHERE, radius=r,
-                    rgbaColor=[0.8, 0.2, 0.2, 1.0],
-                )
-
-        elif object_type == 'box':
-            if half_extents is None:
-                half_extents = [0.5, 0.5, 0.5]
-            he = [
-                self.cell_size * half_extents[0] / 2.0,  # define half size to get full sized objects
-                self.cell_size * half_extents[1] / 2.0,
-                self.grid_sizes[-1] * half_extents[2] / 2.0,
-            ]
-            collision_id = self.env.createCollisionShape(
-                shapeType=self.env.GEOM_BOX, halfExtents=he,
-            )
-            if self.visual_obstacles:
-                visual_id = self.env.createVisualShape(
-                    shapeType=self.env.GEOM_BOX, halfExtents=he,
-                    rgbaColor=[0.8, 0.2, 0.2, 1.0],
-                )
-
-        return int(collision_id), int(visual_id)
-
-    def _spawn_object(
-            self, 
-            collision_id, 
-            base_position: List[float],
-            base_orientation: List[int] | None=None,
-            visual_id=-1,
-        ):
-        """
-        position object body in environment.
-
-        Args:
-            collision_id: PyBullet collision shape id
-            base_position: [x, y, z] world coordinates of the objects center position
-            base_orientation: [x, y, z, w] quaternion representation of 3d rotation
-        
-        """
-        # create body id
-        object_id = self.env.createMultiBody(
-            baseMass=0.0,  # Mass=0 -> Static obstacles
-            baseVisualShapeIndex=int(visual_id),
-            baseCollisionShapeIndex=int(collision_id),
-            basePosition=base_position,
-            baseOrientation=base_orientation if base_orientation is not None else [0, 0, 0, 1],
-            )
-        
-        self.obstacles.append(object_id)  # collect object ids to destroy the objects at the end of the episode
-
-    def _create_obstacles(self):
-        """
-        skip or generate obstacles and position them in the environment
-        """
-        if self.num_obstacles_range is None:
-            # no obstacles created
-            self.num_obs = 0
-        else:
-            # pick random number for obstacles from range
-            self.num_obs = self.np_random.integers(
-                low=self.num_obstacles_range[0],
-                high=self.num_obstacles_range[1]+1,
-            )
-
-            # --- build a set of object body shapes
-            sub_set = max(2, self.num_obs // 3)  # build 3 times less obstacles than self.num_obstacles since they can be reused (better performance)
-            obj_shapes = []
-            for _ in range(sub_set):
-                shape_type = self.np_random.choice(self.obstacle_shapes)
-                size_fraction_np = self.np_random.uniform(
-                    low=self.obstacle_size_range[0],
-                    high=self.obstacle_size_range[1],
-                    size=(3,),
-                )
-                size_fractions = size_fraction_np.tolist()  # cast to list of python floats
-
-                obj_shape = self._create_object_shape(
-                    object_type=shape_type,
-                    scaled_radius=size_fractions[0],
-                    height=1.0,
-                    half_extents=size_fractions,
-                )
-                obj_shapes.append(obj_shape)
-
-            # --- place objects from set of shapes on free cells
-            for _ in range(self.num_obs):
-                # sample free cell -> get free position
-                free_cell = self.occupancy_grid.get_random_free_cell()  # TODO implement placment strategy ?
-                x, y = self.occupancy_grid.cell_to_world(free_cell)
-                z = self.z_size / 2  # center obstacle vertically (floor-to-ceiling columns)  # TODO adjust hight for shperes and boxes 
-                free_position = [x, y, z]
-
-                # randomly pick a shape from set of generated shapes
-                shape = self.np_random.choice(obj_shapes)
-                collision_id = shape[0]
-                visual_id = shape[1]
-
-                # place obstacle
-                self._spawn_object(collision_id=collision_id, base_position=free_position, visual_id=visual_id)
-                self.occupancy_grid.mark_cells([free_cell], occupied=True)
 
     def reset(
         self,
@@ -514,6 +270,10 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         #     self.info["out_of_bounds"] = True
         #     self.termination |= True
 
+    # ──────────────────────────────────────────────────────────────
+    #  Environment Builders 
+    # ──────────────────────────────────────────────────────────────
+
     def set_stage(self, stage):
         """
         interface method that adjusts the environments difficulty level according to the current stage of the curriculum_callback
@@ -530,3 +290,324 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.obstacle_size_range = stage["obstacle_size_range"]
         self.num_targets = stage['num_targets']
         self.target_distance_range = stage['target_distance_range']
+        self.obstacle_placement = stage['obstacle_placement']
+        self.obstacle_distance_range = stage['obstacle_distance_range']
+
+    # called in reset()
+    def _create_targets(self) -> np.ndarray:
+        """create waypoint targets within a square annulus around the UAV start position.
+        Falls back to random free cell placement when target_distance_range is None.
+        """
+        og = self.occupancy_grid
+        start_xy = (self.start_pos[0, 0], self.start_pos[0, 1])
+
+        targets = []
+        for _ in range(self.num_targets):
+            if self.target_distance_range is None:
+                free_cell = og.get_random_free_cell()
+            else:
+                free_cell = self._get_free_cell_in_range(start_xy, self.target_distance_range)
+
+            x, y = og.cell_to_world(free_cell)
+            z = self.np_random.uniform(self.min_height + 0.5, self.z_size)
+            targets.append([x, y, z])
+            og.mark_cells([free_cell], occupied=True)
+
+        return np.array(targets, dtype=np.float32)
+
+    # called in reset()
+    def _create_boundary_walls(self):
+        """
+        create invisavle collision walls at env boundaries so that lidar rays can detect them
+        """
+        og = self.occupancy_grid
+        half_thickness = 0.01
+        z_half = self.z_size / 2
+
+        # (position, halfExtents) for each wall
+        walls = [
+            # -x wall
+            (
+                [og.x_min - half_thickness, 0.0, z_half],
+                [half_thickness, og.y_size / 2, z_half],
+            ),
+            # +x wall
+            (
+                [og.x_max + half_thickness, 0.0, z_half],
+                [half_thickness, og.y_size / 2, z_half],
+            ),
+            # -y wall
+            (
+                [0.0, og.y_min - half_thickness, z_half],
+                [og.x_size / 2, half_thickness, z_half],
+            ),
+            # +y wall
+            (
+                [0.0, og.y_max + half_thickness, z_half],
+                [og.x_size / 2, half_thickness, z_half],
+            ),
+            # ceiling
+            (
+                [0.0, 0.0, self.z_size + half_thickness],
+                [og.x_size / 2, og.y_size / 2, half_thickness],
+            ),
+        ]
+
+        for pos, half_extents in walls:
+            col_id = self.env.createCollisionShape(
+                shapeType=self.env.GEOM_BOX,
+                halfExtents=half_extents,
+            )
+            body_id = self.env.createMultiBody(
+                baseMass=0.0,
+                baseCollisionShapeIndex=int(col_id),
+                basePosition=pos,
+                baseOrientation=[0, 0, 0, 1],
+            )
+
+            self.boundary_wall_ids.append(body_id)
+
+    def _create_obstacles(self):
+        """
+        skip or generate obstacles and position them in the environment
+        """
+        if self.num_obstacles_range is None:
+            # no obstacles created
+            self.num_obs = 0
+        else:
+            # pick random number for obstacles from range
+            self.num_obs = self.np_random.integers(
+                low=self.num_obstacles_range[0],
+                high=self.num_obstacles_range[1]+1,
+            )
+
+            # --- build a set of object body shapes
+            sub_set = max(2, self.num_obs // 3)  # build 3 times less obstacles than self.num_obstacles since they can be reused (better performance)
+            obj_shapes = []
+            for _ in range(sub_set):
+                shape_type = self.np_random.choice(self.obstacle_shapes)
+                size_fraction_np = self.np_random.uniform(
+                    low=self.obstacle_size_range[0],
+                    high=self.obstacle_size_range[1],
+                    size=(3,),
+                )
+                size_fractions = size_fraction_np.tolist()  # cast to list of python floats
+
+                obj_shape = self._create_object_shape(
+                    object_type=shape_type,
+                    scaled_radius=size_fractions[0],
+                    height=1.0,
+                    half_extents=size_fractions,
+                )
+                obj_shapes.append(obj_shape)
+
+            # --- place objects from set of shapes on free cells
+            for _ in range(self.num_obs):
+                # sample free cell using the configured placement strategy
+                free_cell = self._sample_obstacle_cell()
+                x, y = self.occupancy_grid.cell_to_world(free_cell)
+                z = self.z_size / 2  # center obstacle vertically (floor-to-ceiling columns)  # TODO adjust hight for shperes and boxes
+                free_position = [x, y, z]
+
+                # randomly pick a shape from set of generated shapes
+                shape = self.np_random.choice(obj_shapes)
+                collision_id = shape[0]
+                visual_id = shape[1]
+
+                # place obstacle
+                self._spawn_object(collision_id=collision_id, base_position=free_position, visual_id=visual_id)
+                self.occupancy_grid.mark_cells([free_cell], occupied=True)
+
+    def _create_object_shape(
+            self, 
+            object_type: Literal['cylinder', 'sphere', 'box'], 
+            scaled_radius: float=1.0, 
+            height: float=1.0,
+            half_extents: Optional[List[float]]=None,  # define half sizes to get full sized objects 
+        ):
+        """
+        create the object shapes that can be spawned with _spawn_object() on multiple positions, without having to recreate the shapes
+        Args:
+            object_type:    'cylinder' or 'box' or sphere
+            scaled_radius:  fraction of *cell_size* used as cylinder radius [0-1]
+            height:         fraction of environment z-height  (1.0 = floor -> ceiling) [0-1]
+            half_extents:   [sx, sy, sz] — fractions of cell_size (xy) and
+                            grid z-height (z) used as **full-size** scalars;
+                            the method halves them for PyBullet's halfExtents. [0-1]
+
+        Returns:
+            (collision_id, visual_id)   visual_id is -1 when visual_obstacles=False
+        """
+        visual_id = -1  # PyBullet convention: no visual shape
+        if object_type == 'cylinder':
+            r = self.cell_size * scaled_radius
+            h = self.grid_sizes[-1] * height
+            
+            # create collision shape
+            collision_id = self.env.createCollisionShape(
+                shapeType=self.env.GEOM_CYLINDER, radius=r, height=h,
+            )
+            if self.visual_obstacles:
+                # create visual shape
+                visual_id = self.env.createVisualShape(
+                    shapeType=self.env.GEOM_CYLINDER, radius=r, length=h,  # obstacles have full hight of the environment (from ground to sealing)
+                    rgbaColor=[0.8, 0.2, 0.2, 1.0],
+                )
+
+        elif object_type == 'sphere':
+            r = self.cell_size * scaled_radius
+            collision_id = self.env.createCollisionShape(
+                shapeType=self.env.GEOM_SPHERE, radius=r,
+            )
+
+            if self.visual_obstacles:
+                visual_id = self.env.createVisualShape(
+                    shapeType=self.env.GEOM_SPHERE, radius=r,
+                    rgbaColor=[0.8, 0.2, 0.2, 1.0],
+                )
+
+        elif object_type == 'box':
+            if half_extents is None:
+                half_extents = [0.5, 0.5, 0.5]
+            he = [
+                self.cell_size * half_extents[0] / 2.0,  # define half size to get full sized objects
+                self.cell_size * half_extents[1] / 2.0,
+                self.grid_sizes[-1] * half_extents[2] / 2.0,
+            ]
+            collision_id = self.env.createCollisionShape(
+                shapeType=self.env.GEOM_BOX, halfExtents=he,
+            )
+            if self.visual_obstacles:
+                visual_id = self.env.createVisualShape(
+                    shapeType=self.env.GEOM_BOX, halfExtents=he,
+                    rgbaColor=[0.8, 0.2, 0.2, 1.0],
+                )
+
+        return int(collision_id), int(visual_id)
+
+    def _spawn_object(
+            self, 
+            collision_id, 
+            base_position: List[float],
+            base_orientation: List[int] | None=None,
+            visual_id=-1,
+        ):
+        """
+        position object body in environment.
+
+        Args:
+            collision_id: PyBullet collision shape id
+            base_position: [x, y, z] world coordinates of the objects center position
+            base_orientation: [x, y, z, w] quaternion representation of 3d rotation
+        
+        """
+        # create body id
+        object_id = self.env.createMultiBody(
+            baseMass=0.0,  # Mass=0 -> Static obstacles
+            baseVisualShapeIndex=int(visual_id),
+            baseCollisionShapeIndex=int(collision_id),
+            basePosition=base_position,
+            baseOrientation=base_orientation if base_orientation is not None else [0, 0, 0, 1],
+            )
+        
+        self.obstacles.append(object_id)  # collect object ids to destroy the objects at the end of the episode
+
+    def _sample_obstacle_cell(self) -> tuple[int, int]:
+        """Pick a free cell for an obstacle using the current placement strategy."""
+        if self.obstacle_placement == "around_target":
+            target_xy = tuple(self.waypoints.targets[0][:2])
+            if self.obstacle_distance_range is not None:
+                return self._get_free_cell_in_range(target_xy, self.obstacle_distance_range)
+            # no explicit range — fall back to random
+            return self.occupancy_grid.get_random_free_cell()
+
+        if self.obstacle_placement == "along_path":
+            return self._get_free_cell_along_path()
+
+        # default: "random"
+        return self.occupancy_grid.get_random_free_cell()
+
+    def _get_free_cell_in_range(
+        self,
+        center_xy: tuple[float, float],
+        distance_range: Sequence[float],
+    ) -> tuple[int, int]:
+        """return a random free cell within a square around *center_xy*
+
+        Args:
+            center_xy: (x, y) world coordinates of the squares centre
+            distance_range: (r_min, r_max) in world units
+
+        Returns:
+            (i, j) global grid indices of the chosen free cell
+        """
+        og = self.occupancy_grid
+        ci, cj = og.world_to_cell(*center_xy)
+        r_min, r_max = distance_range
+        
+        # convert radii from world units to cell units
+        cells_inner = int(np.floor(r_min / og.cell_size))
+        cells_outer = int(np.ceil(r_max / og.cell_size))
+
+        # outer square bounds, clamped to grid
+        i_lo = max(ci - cells_outer, 0)
+        i_hi = min(ci + cells_outer, og.nx - 1)
+        j_lo = max(cj - cells_outer, 0)
+        j_hi = min(cj + cells_outer, og.ny - 1)
+
+        # all cell indices inside the outer square
+        ii, jj = np.mgrid[i_lo:i_hi + 1, j_lo:j_hi + 1]
+
+        # exclude inner square (cells too close to start)
+        outside_inner = (np.abs(ii - ci) >= cells_inner) | (np.abs(jj - cj) >= cells_inner)
+
+        # exclude occupied cells
+        free = ~og.grid[i_lo:i_hi + 1, j_lo:j_hi + 1]
+
+        valid_cells = np.argwhere(outside_inner & free)
+        if len(valid_cells) == 0:
+            raise ValueError("No free cells in the requested distance range")
+
+        pick = self.np_random.integers(len(valid_cells))
+        return (int(valid_cells[pick, 0] + i_lo), int(valid_cells[pick, 1] + j_lo))  # convert local sub-grid indices back to global grid indices
+
+    def _get_free_cell_along_path(self, spread: int = 2):
+        """
+        pick a free cell near the start→target line
+
+        Args:
+            spread: max perpendicular offset in cells (0 = exactly on the line)
+        """
+        og = self.occupancy_grid
+
+        start_ij = np.array(og.world_to_cell(*self.start_pos[0, :2]))
+        target_ij = np.array(og.world_to_cell(*self.waypoints.targets[0][:2]))
+
+        # rasterize the line into cell coordinates
+        n_points = int(np.linalg.norm(target_ij - start_ij)) + 1  # euclidian distance start->target gives point count of cells 
+        line_cells = np.round(
+            np.linspace(start_ij, target_ij, max(n_points, 2))  # interpolate n_points (even spaced coordinate pairs) from start to target. plotting a straght line similar to [Bresenham's line algorithm](https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm)
+        ).astype(int)  # (N, 2)
+
+        # add random perpendicular offset
+        offsets = self.np_random.integers(-spread, spread + 1, size=line_cells.shape)
+        candidates = np.clip(
+            line_cells + offsets,
+            [0, 0],
+            [og.nx - 1, og.ny - 1],
+        )
+
+        # keep only free cells, skip start/target vicinity
+        mask = np.array([
+            not og.grid[c[0], c[1]]
+            and not np.array_equal(c, start_ij)
+            and not np.array_equal(c, target_ij)
+            for c in candidates
+        ])
+
+        valid = candidates[mask]
+        if len(valid) == 0:
+            return og.get_random_free_cell()
+
+        idx = self.np_random.integers(len(valid))
+        return tuple(valid[idx])

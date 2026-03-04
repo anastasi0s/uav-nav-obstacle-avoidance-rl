@@ -18,7 +18,7 @@ env:
   num_obstacles_range: [0, 3]       # (controlled by curriculum learning)
   obstacle_shapes: ['cylinder']     # ['cylinder', 'box', 'sphere']
   obstacle_size_range: [0.5, 0.5]   # [min, max] fraction of cell_size
-  visual_obstacles: true           # render meshes (for eval only)
+  visual_obstacles: false           # render meshes (for eval only)
 
   # Simulation --- with agent_hz=30 and 80s/episode, an episode is up to ~2400 steps
   max_duration_seconds: 80.0        # max simulation time of the env
@@ -57,6 +57,8 @@ curriculum:
       num_obstacles_range: null
       obstacle_shapes: null
       obstacle_size_range: null
+      obstacle_placement: "random"
+      obstacle_distance_range: null
       num_targets: 1                # NOTE!!! policy can't handle varying num of targets -> adjust observations before changing num of targets mid-training
       target_distance_range: null
 
@@ -65,6 +67,8 @@ curriculum:
       num_obstacles_range: [1, 3]
       obstacle_shapes: ["cylinder"]
       obstacle_size_range: [0.3, 0.5]
+      obstacle_placement: "along_path"
+      obstacle_distance_range: null
       num_targets: 1
       target_distance_range: [3.0, 6.0]
 
@@ -73,6 +77,8 @@ curriculum:
       num_obstacles_range: [3, 6]
       obstacle_shapes: ["cylinder", "box"]
       obstacle_size_range: [0.2, 0.7]
+      obstacle_placement: "around_target"
+      obstacle_distance_range: [2.0, 5.0]
       num_targets: 1
       target_distance_range: [3.0, 8.0]
 
@@ -81,6 +87,8 @@ curriculum:
       num_obstacles_range: [6, 10]
       obstacle_shapes: ["cylinder", "box", "sphere"]
       obstacle_size_range: [0.2, 0.9]
+      obstacle_placement: "along_path"
+      obstacle_distance_range: null
       num_targets: 1
       target_distance_range: [4.0, 10.0]
 
@@ -89,6 +97,8 @@ curriculum:
       num_obstacles_range: [8, 12]
       obstacle_shapes: ["cylinder", "box", "sphere"]
       obstacle_size_range: [0.2, 1.0]
+      obstacle_placement: "random"
+      obstacle_distance_range: null
       num_targets: 1
       target_distance_range: [5.0, 12.0]
 
@@ -97,6 +107,8 @@ curriculum:
       num_obstacles_range: [10, 15]
       obstacle_shapes: ["cylinder", "box", "sphere"]
       obstacle_size_range: [0.2, 1.0]
+      obstacle_placement: "random"
+      obstacle_distance_range: null
       num_targets: 1
       target_distance_range: null           # unconstrained
 

@@ -1,11 +1,9 @@
-from typing import Dict, Optional
-
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import wandb
 from plotly.subplots import make_subplots
-from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
+from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 
 from uav_nav_obstacle_avoidance_rl import config
@@ -77,6 +75,8 @@ class CustomEvalCallback(EvalCallback):
                 "obstacles_history": [],  # for trajectory plotting
             }
             self._is_success_buffer = []
+            # reset per-episode tracking 
+            self._reset_current_episode()
 
             # START EVALUATION
             episode_rewards, episode_lengths = evaluate_policy(
@@ -93,49 +93,7 @@ class CustomEvalCallback(EvalCallback):
             # log detailed eval metrics to W&B
             self._log_after_evaluation()
 
-            # # Continue with standard EvalCallback logging
-            # if self.log_path is not None:
-            #     assert isinstance(episode_rewards, list)
-            #     assert isinstance(episode_lengths, list)
-            #     self.evaluations_timesteps.append(self.num_timesteps)
-            #     self.evaluations_results.append(episode_rewards)
-            #     self.evaluations_length.append(episode_lengths)
-
-            #     kwargs = {}
-            #     # Save success log if present
-            #     if len(self._is_success_buffer) > 0:
-            #         self.evaluations_successes.append(self._is_success_buffer)
-            #         kwargs = dict(successes=self.evaluations_successes)
-
-            #     np.savez(
-            #         self.log_path,
-            #         timesteps=self.evaluations_timesteps,
-            #         results=self.evaluations_results,
-            #         ep_lengths=self.evaluations_length,
-            #         **kwargs,
-            #     )
-
             mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
-            # mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(episode_lengths)
-            # self.last_mean_reward = float(mean_reward)
-
-            # if self.verbose >= 1:
-            #     print(f"Eval num_timesteps={self.num_timesteps}, episode_reward={mean_reward:.2f} +/- {std_reward:.2f}")
-            #     print(f"Episode length: {mean_ep_length:.2f} +/- {std_ep_length:.2f}")
-
-            # # Add to current Logger
-            # self.logger.record("eval/mean_reward", float(mean_reward))
-            # self.logger.record("eval/mean_ep_length", mean_ep_length)
-
-            # if len(self._is_success_buffer) > 0:
-            #     success_rate = np.mean(self._is_success_buffer)
-            #     if self.verbose >= 1:
-            #         print(f"Success rate: {100 * success_rate:.2f}%")
-            #     self.logger.record("eval/success_rate", success_rate)
-
-            # # Dump log so the evaluation results are printed with the correct timestep
-            # self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
-            # self.logger.dump(self.num_timesteps)
 
             if mean_reward > self.best_mean_reward:
                 if self.verbose >= 1:
@@ -184,38 +142,23 @@ class CustomEvalCallback(EvalCallback):
                 # -> capture start position
                 self.current_episode_data["start_position"] = lin_pos.copy()
 
-                # -> capture obstacle info
+                # -> capture obstacle info via axis-aligned bounding boxes (shape-agnostic)
                 if hasattr(self.underlying_env, 'obstacles') and self.underlying_env.obstacles:
                     obstacles_data = []
                     for obs_id in self.underlying_env.obstacles:
                         try:
-                            # capture obstacle position and orientation
-                            pos, orn = self.underlying_env.env.getBasePositionAndOrientation(obs_id)
-                            
-                            # capture collision shape data
-                            collision_shape_info = self.underlying_env.env.getCollisionShapeData(obs_id, -1)
-
-                            if collision_shape_info:
-                                shape_info = collision_shape_info[0]  # first (and usually only) collision shape
-                                obstacles_data.append({
-                                    'id': obs_id,
-                                    'position': np.array(pos),
-                                    'orientation': np.array(orn),
-                                    'shape_type': shape_info[2],  # geometry type (GEOM_SPHERE=2, GEOM_BOX=3, GEOM_CYLINDER=4)
-                                    'dimensions': np.array(shape_info[3]),  # dimensions  (radius for sphere, half-extents for box, [height, radius] for cylinder)
-                                    'local_frame_pos': np.array(shape_info[5]),  # local position  (local position relative to center of mass)
-                                    'local_frame_orn': np.array(shape_info[6]),  # local orientation
-                                })
+                            aabb_min, aabb_max = self.underlying_env.env.getAABB(obs_id)
+                            obstacles_data.append({
+                                'aabb_min': np.array(aabb_min),
+                                'aabb_max': np.array(aabb_max),
+                            })
                         except Exception as obs_error:
-                            # skip obstacle if there are no data
-                            if self.verbose >= 2:
-                                logger.debug(f"Could not capture obstacle {obs_id}: {obs_error}")
+                            logger.debug(f"Could not capture obstacle {obs_id}: {obs_error}")
                             continue
 
                     self.current_episode_data["obstacles"] = obstacles_data
                 else:
-                    # No obstacles in this episode
-                    self.current_episode_data["obstacles"] = None
+                    self.current_episode_data["obstacles"] = []
 
             # at episode start ->
             if self.current_episode_data["target_position"] is None:
@@ -229,19 +172,7 @@ class CustomEvalCallback(EvalCallback):
                 self._process_completed_eval_episode(info)
 
         except Exception as e:
-            if self.verbose >= 1:
-                print(f"Error in _eval_callback: {e}")
-
-    def _reset_current_episode(self):
-        """reset tracking for a new episode"""
-        self.current_episode_data = {
-            "positions": [],
-            "velocities": [],
-            "start_position": None,
-            "target_position": None,
-            "start_time": self.num_timesteps,
-            "obstacles": []
-        }
+            logger.error(f"Error in _log_eval_callback: {e}", exc_info=True)
 
     def _process_completed_eval_episode(self, info: dict):
         """
@@ -260,7 +191,7 @@ class CustomEvalCallback(EvalCallback):
 
             # check for success = all targets reached, without collisions
             success = env_complete and not collision
-            
+
             # calculate custom metrics
             path_length = self._calculate_path_length(
                 self.current_episode_data["positions"]
@@ -304,45 +235,24 @@ class CustomEvalCallback(EvalCallback):
                 np.array(self.current_episode_data["target_position"]).copy()
             )  # XXX adjust for mulitple waypoints
 
+            obstacles = self.current_episode_data["obstacles"]
             self.current_eval_cycle_data["obstacles_history"].append(
-                self.current_episode_data["obstacles"].copy()  # list of obstacles (dicts)
+                obstacles.copy() if isinstance(obstacles, list) else []
             )
 
             # RESET for next episode
             self._reset_current_episode()
 
         except Exception as e:
-            if self.verbose >= 1:
-                print(f"Error in detailed eval callback: {e}")
-
-    def _calculate_path_length(self, positions) -> float:
-        """Calculate total distance traveled"""
-        if len(positions) < 2:
-            return 0.0
-        positions = np.array(positions)
-        distances = np.linalg.norm(
-            np.diff(positions, axis=0), axis=1
-        )  # calc. difference between postions -> calc. norm (distance) of difference -> sum all distances between positions -> complete length of traveled path
-        return float(np.sum(distances))
-
-    def _calculate_average_velocity(self, velocities) -> float:
-        """Calculate average velocity magnitude"""
-        if len(velocities) == 0:
-            return 0.0
-        velocities = np.array(velocities)
-        velocity_magnitudes = np.linalg.norm(velocities, axis=1)
-        return float(np.mean(velocity_magnitudes))
-
-    def _calculate_path_efficiency(self, start_pos, target_pos, path_length) -> float:
-        """Calculate path efficiency (path_length / direct_distance)"""
-        direct_distance = np.linalg.norm(target_pos - start_pos)
-        if direct_distance == 0:
-            return 0.0
-
-        return path_length / direct_distance
+            logger.error(f"Error in _process_completed_eval_episode: {e}", exc_info=True)
 
     def _log_after_evaluation(self):
         """log detailed metrics of a completed evaluation-round to W&B"""
+        n_episodes = len(self.current_eval_cycle_data["success"])
+        if n_episodes == 0:
+            logger.warning("No episodes were recorded during evaluation — skipping metrics logging.")
+            return
+
         # calculate aggregate metrics
         eval_metrics = {
             "eval_uav/success_rate": np.mean(
@@ -376,6 +286,8 @@ class CustomEvalCallback(EvalCallback):
 
         # log to W&B
         wandb.log(eval_metrics, step=self.num_timesteps)
+        logger.info(f"Eval cycle logged: {n_episodes} episodes, "
+                     f"success_rate={eval_metrics['eval_uav/success_rate']:.2f}")
 
         # log additional analysis plots
         if self.exp_analysis:
@@ -394,10 +306,7 @@ class CustomEvalCallback(EvalCallback):
             failure_df = df[df["success"] == 0]
 
             if success_df.empty or failure_df.empty:
-                if self.verbose >= 1:
-                    logger.warning(
-                        "Insufficient data for success analysis (need both success and failure episodes)"
-                    )
+                logger.debug("Insufficient data for success analysis (need both success and failure episodes)")
                 return
 
             # Create subplot layout
@@ -695,11 +604,8 @@ class CustomEvalCallback(EvalCallback):
             # 7. Failure reasons pie chart
             failure_reasons = {
                 "Collision": failure_df["collision"].sum(),
-                "Timeout/Other": len(failure_df)
-                - failure_df["collision"].sum(),
+                "Timeout/Other": len(failure_df) - failure_df["collision"].sum(),
             }
-
-            # Remove zero categories
             failure_reasons = {k: v for k, v in failure_reasons.items() if v > 0}
 
             if failure_reasons:
@@ -742,15 +648,18 @@ class CustomEvalCallback(EvalCallback):
             )
 
         except Exception as e:
-            if self.verbose >= 1:
-                logger.exception(f"Error creating success analysis plots: {e}")
+            logger.exception(f"Error creating success analysis plots: {e}")
 
     def _log_trajectory_plot(self):
         """Create and log evaluation trajectory plot for an episode"""
         try:
-            # pick 3 random episodes
-            episodes = self.current_eval_cycle_data["success"]
-            picked_episodes = self.rng.choice(len(episodes), size=3, replace=False).tolist()
+            n_episodes = len(self.current_eval_cycle_data["success"])
+            if n_episodes == 0:
+                logger.warning("No episodes available for trajectory plotting.")
+                return
+
+            n_pick = min(3, n_episodes)
+            picked_episodes = self.rng.choice(n_episodes, size=n_pick, replace=False).tolist()
 
             for idx, ep_idx in enumerate(picked_episodes):
                 positions = self.current_eval_cycle_data["positions_history"][ep_idx][:-1]  # take one position less ([:-1]), so that the trajectory is a one-way and not a closed loop
@@ -817,7 +726,7 @@ class CustomEvalCallback(EvalCallback):
                             colorbar=dict(title="Speed (m/s)"),
                         ),
                         name="UAV Trajectory",
-                        text=[f"Speed: {speed:.2f} m/s" for speed in speed_magnitudes],
+                        text=[f"Speed: {s:.2f} m/s" for s in speed_magnitudes],
                         hovertemplate="<b>Position</b><br>X: %{x:.2f}<br>Y: %{y:.2f}<br>Z: %{z:.2f}<br>%{text}<extra></extra>",
                     )
                 )
@@ -825,120 +734,52 @@ class CustomEvalCallback(EvalCallback):
                 # Add start/end and target markers
                 fig.add_trace(
                     go.Scatter3d(
-                        x=[positions[0, 0]],
-                        y=[positions[0, 1]],
-                        z=[positions[0, 2]],
+                        x=[positions[0, 0]], y=[positions[0, 1]], z=[positions[0, 2]],
+                        mode="markers",
+                        marker=dict(size=8, color="black"),
+                        name="Start",
+                    )
+                )
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=[positions[-1, 0]], y=[positions[-1, 1]], z=[positions[-1, 2]],
                         mode="markers",
                         marker=dict(size=8, color="green"),
-                        name="Start",
-                        showlegend=True,
-                    )
-                )
-                fig.add_trace(
-                    go.Scatter3d(
-                        x=[positions[-1, 0]],
-                        y=[positions[-1, 1]],
-                        z=[positions[-1, 2]],
-                        mode="markers",
-                        marker=dict(size=8, color="red"),
                         name="End",
-                        showlegend=True,
                     )
                 )
                 fig.add_trace(
                     go.Scatter3d(
-                        x=[target_position[0]],
-                        y=[target_position[1]],
-                        z=[target_position[2]],
+                        x=[target_position[0]], y=[target_position[1]], z=[target_position[2]],
                         mode="markers",
                         marker=dict(size=10, color="gold", symbol="diamond"),
                         name="Target",
-                        showlegend=True,
                     )
                 )
 
-                # plot obstacles using PyBullet collision shape data
+                # plot obstacles as AABB boxes (shape-agnostic)
                 obstacles = self.current_eval_cycle_data["obstacles_history"][ep_idx]
                 if obstacles:
+                    # triangle indices for a box mesh (6 faces = 12 triangles)
+                    i_f = [0, 0, 4, 4, 0, 0, 1, 1, 2, 2, 4, 4]
+                    j_f = [1, 3, 5, 7, 1, 4, 2, 5, 3, 6, 5, 0]
+                    k_f = [2, 2, 6, 6, 5, 3, 6, 4, 7, 7, 1, 3]
+
                     for i, obs in enumerate(obstacles):
-                        pos = obs['position']
-                        shape_type = obs['shape_type']
-                        dims = obs['dimensions']
-                        
-                        # GEOM_SPHERE = 2
-                        if shape_type == 2:
-                            radius = dims[0]
-                            # Create sphere mesh
-                            u = np.linspace(0, 2 * np.pi, 20)
-                            v = np.linspace(0, np.pi, 20)
-                            x = radius * np.outer(np.cos(u), np.sin(v)) + pos[0]
-                            y = radius * np.outer(np.sin(u), np.sin(v)) + pos[1]
-                            z = radius * np.outer(np.ones(np.size(u)), np.cos(v)) + pos[2]
-                            
-                            fig.add_trace(go.Surface(
-                                x=x, y=y, z=z,
-                                opacity=0.5,
-                                colorscale=[[0, 'red'], [1, 'red']],
-                                showscale=False,
-                                name=f'Obstacle {i+1}',
-                                legendgroup=f'obs{i}',
-                                hovertemplate=f'<b>Obstacle {i+1}</b><br>Type: Sphere<br>Radius: {radius:.2f}m<extra></extra>',
-                            ))
-                        
-                        # GEOM_BOX = 3
-                        elif shape_type == 3:
-                            # dims contains half-extents [x, y, z]
-                            half_extents = dims[:3]
-                            
-                            # Create 8 vertices of the box
-                            vertices = np.array([
-                                [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
-                                [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]
-                            ]) * half_extents + pos
-                            
-                            # Create a mesh (faces) for the box for better visualization
-                            # Define 6 faces (each face has 4 vertices forming 2 triangles)
-                            i_faces = [0, 0, 2, 2, 4, 4, 1, 1, 3, 3, 5, 5]  # vertex indices for triangles
-                            j_faces = [1, 3, 3, 1, 5, 7, 5, 0, 7, 2, 6, 4]
-                            k_faces = [2, 1, 6, 3, 6, 5, 4, 5, 4, 6, 2, 7]
-                            
-                            fig.add_trace(go.Mesh3d(
-                                x=vertices[:, 0],
-                                y=vertices[:, 1],
-                                z=vertices[:, 2],
-                                i=i_faces,
-                                j=j_faces,
-                                k=k_faces,
-                                opacity=0.5,
-                                color='red',
-                                name=f'Obstacle {i+1}',
-                                legendgroup=f'obs{i}',
-                                hovertemplate=f'<b>Obstacle {i+1}</b><br>Type: Box<br>Dims: {half_extents[0]:.2f}x{half_extents[1]:.2f}x{half_extents[2]:.2f}m<extra></extra>',
-                            ))
-                        
-                        # GEOM_CYLINDER = 4 (or GEOM_CAPSULE = 7)
-                        elif shape_type == 4:
-                            # For cylinder: dims[0] = height, dims[1] = radius
-                            height = dims[0]
-                            radius = dims[1]
-                            
-                            # Create cylinder mesh
-                            theta = np.linspace(0, 2*np.pi, 30)
-                            z_cyl = np.linspace(-height/2, height/2, 20)
-                            theta_grid, z_grid = np.meshgrid(theta, z_cyl)
-                            x = radius * np.cos(theta_grid) + pos[0]
-                            y = radius * np.sin(theta_grid) + pos[1]
-                            z = z_grid + pos[2]
-                            
-                            fig.add_trace(go.Surface(
-                                x=x, y=y, z=z,
-                                opacity=0.5,
-                                colorscale=[[0, 'red'], [1, 'red']],
-                                showscale=False,
-                                name=f'Obstacle {i+1}',
-                                legendgroup=f'obs{i}',
-                                hovertemplate=f'<b>Obstacle {i+1}</b><br>Type: Cylinder<br>Radius: {radius:.2f}m<br>Height: {height:.2f}m<extra></extra>',
-                            ))
+                        mn, mx = obs['aabb_min'], obs['aabb_max']
+                        verts = np.array([
+                            [mn[0], mn[1], mn[2]], [mx[0], mn[1], mn[2]],
+                            [mx[0], mx[1], mn[2]], [mn[0], mx[1], mn[2]],
+                            [mn[0], mn[1], mx[2]], [mx[0], mn[1], mx[2]],
+                            [mx[0], mx[1], mx[2]], [mn[0], mx[1], mx[2]],
+                        ])
+                        fig.add_trace(go.Mesh3d(
+                            x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
+                            i=i_f, j=j_f, k=k_f,
+                            opacity=0.4, color='red',
+                            name=f'Obstacle {i+1}',
+                            hovertemplate=f'<b>Obstacle {i+1}</b><extra></extra>',
+                        ))
 
                 # update layout
                 fig.update_layout(
@@ -972,8 +813,7 @@ class CustomEvalCallback(EvalCallback):
                 )
 
         except Exception as e:
-            if self.verbose >= 1:
-                logger.exception(f"Error creating trajectory plot: {e}")
+            logger.exception(f"Error creating trajectory plot: {e}")
 
     def _log_correlation_matrix(self):
         """Create and log correlation matrix plot to W&B"""
@@ -981,11 +821,15 @@ class CustomEvalCallback(EvalCallback):
             # Create DataFrame from current evaluation cycle data
             df = pd.DataFrame(self.current_eval_cycle_data)
 
-            # remove useless columns
+            # remove non-numeric columns
             df = df.drop(
                 ["positions_history", "velocities_history", "target_position_history", "obstacles_history"],
                 axis=1,
             )
+
+            if df.empty:
+                logger.warning("Empty DataFrame for correlation matrix — skipping.")
+                return
 
             # remove rows where path_efficiency is 0 for better correlation
             df["path_efficiencies"] = df["path_efficiencies"].replace(0.0, np.nan)
@@ -1019,7 +863,6 @@ class CustomEvalCallback(EvalCallback):
                 yaxis_zeroline=False,
             )
 
-            # Log to W&B using native wandb logging
             wandb.log(
                 {
                     "eval_analysis/correlation_matrix": wandb.Html(
@@ -1030,5 +873,38 @@ class CustomEvalCallback(EvalCallback):
             )
 
         except Exception as e:
-            if self.verbose >= 1:
-                logger.exception(f"Error creating correlation matrix plot: {e}")
+            logger.exception(f"Error creating correlation matrix plot: {e}")
+
+    def _reset_current_episode(self):
+        """reset tracking for a new episode"""
+        self.current_episode_data = {
+            "positions": [],
+            "velocities": [],
+            "start_position": None,
+            "target_position": None,
+            "start_time": self.num_timesteps,
+            "obstacles": []
+        }
+
+    def _calculate_path_length(self, positions) -> float:
+        """Calculate total distance traveled"""
+        if len(positions) < 2:
+            return 0.0
+        positions = np.array(positions)
+        distances = np.linalg.norm(np.diff(positions, axis=0), axis=1)
+        return float(np.sum(distances))
+
+    def _calculate_average_velocity(self, velocities) -> float:
+        """Calculate average velocity magnitude"""
+        if len(velocities) == 0:
+            return 0.0
+        velocities = np.array(velocities)
+        velocity_magnitudes = np.linalg.norm(velocities, axis=1)
+        return float(np.mean(velocity_magnitudes))
+
+    def _calculate_path_efficiency(self, start_pos, target_pos, path_length) -> float:
+        """Calculate path efficiency (path_length / direct_distance)"""
+        direct_distance = np.linalg.norm(target_pos - start_pos)
+        if direct_distance == 0:
+            return 0.0
+        return path_length / direct_distance

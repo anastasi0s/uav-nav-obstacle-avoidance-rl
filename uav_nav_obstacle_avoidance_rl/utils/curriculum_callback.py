@@ -156,7 +156,6 @@ class CurriculumCallback(BaseCallback):
             {
                 "curriculum/stage": self.current_stage_idx,
                 "curriculum/success_rate": success_rate,
-                "curriculum/window_size": len(self.success_window),
                 "curriculum/advance_streak": self._advance_streak,
                 "curriculum/regress_streak": self._regress_streak,
             },

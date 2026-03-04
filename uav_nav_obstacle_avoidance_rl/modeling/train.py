@@ -33,6 +33,9 @@ def run_exp(
     timesteps: int = 500000,
     eval_freq: int = 100000,
     n_envs: int = 2,
+    n_eval_episodes: int = 30,
+    log_interval: int = 10,
+    seed: int = config.RANDOM_SEED,
     exp_analysis: bool = True,
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     wandb_tags: list[str] | None = None,
@@ -101,7 +104,7 @@ def run_exp(
             best_model_save_path=f"{run.dir}/models",
             log_path=run.dir,
             eval_freq=eval_freq,
-            n_eval_episodes=30,
+            n_eval_episodes=n_eval_episodes,
             deterministic=True,
             render=False,
             verbose=verbose,
@@ -124,7 +127,7 @@ def run_exp(
             **ppo_config,
             verbose=verbose,
             tensorboard_log=f"{run.dir}/tensorboard",
-            seed=config.RANDOM_SEED,  # the seed is passed through the chain: (PPO → Gymnasium → QuadXBaseEnv → Aviary → VectorVoyagerEnv → VoxelGrid)
+            seed=seed,  # the seed is passed through the chain: (PPO → Gymnasium → QuadXBaseEnv → Aviary → VectorVoyagerEnv → VoxelGrid)
         )
 
         # train model
@@ -132,7 +135,7 @@ def run_exp(
             total_timesteps=timesteps,
             callback=callbacks,
             progress_bar=True,
-            log_interval=10,
+            log_interval=log_interval,
         )
 
 

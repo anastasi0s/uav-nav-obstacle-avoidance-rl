@@ -105,7 +105,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
                 "attitude": gym.spaces.Box(
                     low=-np.inf,
                     high=np.inf,
-                    shape=(10,),  # 10 = 1 (yaw position) + 1 (yaw vel) + 3 (lin_vel) + 1 (height) + 4 (previous actions)
+                    shape=(11,),  # 10 = 2 (yaw position) + 1 (yaw vel) + 3 (lin_vel) + 1 (height) + 4 (1 previous action)
                     dtype=np.float32,
                 ),
                 "target_deltas": gym.spaces.Sequence(
@@ -187,10 +187,11 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # create empty array of type float32 and fill it
         attitude = np.empty(10, dtype=np.float32)
         attitude[0] = ang_vel[2]  # (1,) - yaw, rotation velocity
-        attitude[1] = ang_pos[2]  # (1,) - yaw, rotation position
-        attitude[2:5] = lin_vel  # (3,) - body frame linear velocity vector (u, v, w)
-        attitude[5] = lin_pos[2]  # (1,) - z position
-        attitude[6:10] = (self.action)  # (4,) - previous action  # TODO check for other methods to capture temporal information of taken actions
+        attitude[1] = np.cos(ang_pos[2])  # yaw cos, rotation position
+        attitude[2] = np.sin(ang_pos[2])  # yaw sin
+        attitude[3:6] = lin_vel  # (3,) - body frame linear velocity vector (u, v, w)
+        attitude[6] = lin_pos[2]  # (1,) - z position
+        attitude[7:11] = (self.action)  # (4,) - previous action  # TODO check for other methods to capture temporal information of taken actions
 
         # # create empty array of type float32 -> compute the target deltas with the method from the waypointhandler -> fill array
         # target_deltas = np.empty((1,3), dtype=np.float32)

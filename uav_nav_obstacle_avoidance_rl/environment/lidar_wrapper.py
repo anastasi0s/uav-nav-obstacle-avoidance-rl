@@ -1,7 +1,8 @@
-from typing import Any, Literal, Tuple, Dict
 import math
-import numpy as np
+from typing import Dict, Literal
+
 import gymnasium as gym
+import numpy as np
 from gymnasium import spaces
 
 
@@ -20,7 +21,6 @@ class LidarObservationWrapper(gym.ObservationWrapper):
         fov_horizontal: horizontal field of view in degrees (360 for full sweep)
         fov_vertical: (centered around horizontal)
         ray_start_offset: offset from UAV center to start rays (avoids self-intersection)
-        normalize_distances: If True, distances are normalized to [0, 1]
         add_to_obs: How to add lidar data to observations ('append', 'replace', 'separate')
     
     Observation Space:
@@ -39,7 +39,6 @@ class LidarObservationWrapper(gym.ObservationWrapper):
             fov_horizontal: float = 360.0,
             fov_vertical: float = 30.0,
             ray_start_offset: float = 0.15,
-            normalize_distances: bool = True,
             add_to_obs: Literal["append", "separate", "replace"] = "separate",
     ):
         super().__init__(env)
@@ -53,7 +52,6 @@ class LidarObservationWrapper(gym.ObservationWrapper):
         self.fov_horizontal = math.radians(fov_horizontal)  # convert angles: degree -> radiants
         self.fov_vertical = math.radians(fov_vertical)
         self.ray_start_offset = ray_start_offset
-        self.normalize_distances = normalize_distances
         self.add_to_obs = add_to_obs
 
         # precompute ray directions in local frame (body frame)
@@ -104,8 +102,8 @@ class LidarObservationWrapper(gym.ObservationWrapper):
     def _setup_observation_space(self):
         """config the new observation space with LIDAR data"""
         lidar_space = spaces.Box(
-            low=0.0,
-            high=1.0 if self.normalize_distances else self.max_range,
+            low=self.min_range,
+            high=self.max_range,
             shape=(self.num_rays_total,),
             dtype=np.float32,
         )
@@ -202,10 +200,6 @@ class LidarObservationWrapper(gym.ObservationWrapper):
         # apply minimum range (blind zone) # NOTE redundant!! just in case for smaller offsets
         distances = np.clip(distances, self.min_range, self.max_range)
 
-        # normalize if requested 
-        if self.normalize_distances:
-            distances = (distances - self.min_range) / (self.max_range - self.min_range)
-        
         return distances
     
     def observation(self, observation: Dict):

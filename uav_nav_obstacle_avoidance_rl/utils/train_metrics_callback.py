@@ -49,6 +49,7 @@ class TrainMetricsCallback(BaseCallback):
         self.train_run_metrics = {
             "success": [],
             "collision": [],
+            "targets_reached": [],
         }
 
         # current episode tracking
@@ -158,17 +159,19 @@ class TrainMetricsCallback(BaseCallback):
             # store in run-level episode history
             self.train_run_metrics["success"].append(int(success))
             self.train_run_metrics["collision"].append(int(collision))
+            self.train_run_metrics["targets_reached"].append(targets_reached)
 
             # calculate performance ratios using run-level storage
             success_rate = np.mean(self.train_run_metrics["success"][-20:])
             collision_rate = np.mean(self.train_run_metrics["collision"][-20:])
+            targets_reached_rolling = np.mean(self.train_run_metrics["targets_reached"][-20:])
 
             # log metrics to W&B
             episode_metrics = {
                 # performance ratios
                 "train_uav/success_rate_rolling_20ep": success_rate,
                 "train_uav/collision_rate_rolling_20ep": collision_rate,
-                "train_uav/targets_reached": targets_reached,
+                "train_uav/targets_reached_rolling_20ep": targets_reached_rolling,
                 # movement metrics
                 "train_uav/mean_velocity": mean_velocity,
                 "train_uav/path_length": path_length,

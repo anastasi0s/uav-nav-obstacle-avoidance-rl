@@ -1,3 +1,5 @@
+from gymnasium.wrappers import RescaleAction
+
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecVideoRecorder
 
@@ -5,9 +7,12 @@ from uav_nav_obstacle_avoidance_rl.environment.cam_wrapper import ThirdPersonCam
 from uav_nav_obstacle_avoidance_rl.environment.flaten_wrapper import (
     FlattenVectorVoyagerEnv,
 )
-from uav_nav_obstacle_avoidance_rl.environment.lidar_observation_wrapper import (
+from uav_nav_obstacle_avoidance_rl.environment.lidar_wrapper import (
     LidarFlattenWrapper,
     LidarObservationWrapper,
+)
+from uav_nav_obstacle_avoidance_rl.environment.normalize_obs_wrapper import (
+    NormalizeObservationWrapper,
 )
 from uav_nav_obstacle_avoidance_rl.environment.vector_voyager_env import (
     VectorVoyagerEnv,
@@ -32,12 +37,19 @@ def make_flat_voyager(**env_kwargs):
     # create base environment
     env = VectorVoyagerEnv(**env_kwargs)
 
+    # normalize actions
+    env = RescaleAction(env, min_action=-1.0, max_action=1.0)
+
     if perception_mode == "lidar":
-        # wrap with LiDAR observation
         env = LidarObservationWrapper(env, **lidar_kwargs)
+
+    # normalize observations (works with and without lidar)
+    env = NormalizeObservationWrapper(env)
+
+    # flatten env
+    if perception_mode == "lidar":
         env = LidarFlattenWrapper(env, context_length=num_targets)
     else:
-        # use standard flattening wrapper
         env = FlattenVectorVoyagerEnv(env, context_length=num_targets)
 
     return env

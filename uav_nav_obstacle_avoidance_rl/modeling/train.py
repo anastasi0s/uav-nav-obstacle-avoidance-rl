@@ -9,7 +9,7 @@ from wandb.integration.sb3 import WandbCallback
 
 from uav_nav_obstacle_avoidance_rl import config
 from uav_nav_obstacle_avoidance_rl.test import base_env_test
-from uav_nav_obstacle_avoidance_rl.utils import env_helpers
+from uav_nav_obstacle_avoidance_rl.utils import env_factory
 from uav_nav_obstacle_avoidance_rl.utils.curriculum_callback import CurriculumCallback
 from uav_nav_obstacle_avoidance_rl.utils.eval_metrics_callback import CustomEvalCallback
 from uav_nav_obstacle_avoidance_rl.utils.train_metrics_callback import TrainMetricsCallback
@@ -30,8 +30,8 @@ def run_exp(
     exp_name: str = "exp_0",
     timesteps: int = 500000,
     eval_freq: int = 100000,
-    n_envs: int = 2,
-    n_eval_episodes: int = 30,
+    n_envs: int = 8,
+    n_eval_episodes: int = 50,
     log_interval: int = 10,
     seed: int = config.RANDOM_SEED,
     exp_analysis: bool = True,
@@ -64,7 +64,7 @@ def run_exp(
         # ----- 2. create environments --------
         # create training environment (never visual obstacles for performance)
         vec_env = make_vec_env(
-            env_helpers.make_flat_voyager,
+            env_factory.make_flat_voyager,
             n_envs=n_envs,
             env_kwargs={**env_config, "visual_obstacles": False},
             monitor_kwargs=monitor_info,
@@ -75,8 +75,8 @@ def run_exp(
 
         # create separate evaluation environment
         vec_env_eval = make_vec_env(
-            env_helpers.make_flat_voyager,
-            n_envs=1,  # single env for evaluation - simple and clean
+            env_factory.make_flat_voyager,
+            n_envs=n_envs,  # single env for evaluation - simple and clean
             env_kwargs=env_config,
             monitor_kwargs=monitor_info,
         )
@@ -97,6 +97,7 @@ def run_exp(
         )
 
         eval_freq = eval_freq // n_envs  # calculate eval frequency based on parallel environments -> eval_freq = actual time-steps
+        n_eval_episodes = n_eval_episodes // n_envs
         # add custom evaluation metrics callback
         eval_callback = CustomEvalCallback(
             vec_env_eval,

@@ -26,13 +26,14 @@ class CustomEvalCallback(EvalCallback):
 
         self.rng = np.random.default_rng(config.RANDOM_SEED)
 
-        # store reference to underlying env (unwrap), vectorvoyager
+        #  get all parallel underlying_envs in a list
         if hasattr(self.eval_env, "envs"):
-            self.underlying_env = self.eval_env.envs[0].unwrapped
+            self.underlying_envs = [e.unwrapped for e in self.eval_env.envs]
         else:
-            self.underlying_env = self.eval_env.unwrapped
+            self.underlying_envs = [self.eval_env.unwrapped]
 
-        self.current_episode_data = {}
+        self.n_eval_envs = len(self.underlying_envs)
+        self.current_episode_data = [{} for _ in range(self.n_eval_envs)]
 
         # best model tracking by success rate
         self.best_success_rate = -1.0
@@ -79,8 +80,10 @@ class CustomEvalCallback(EvalCallback):
                 "step_rewards_history": [],  # ← NEW: per-step rewards for each episode
             }
             self._is_success_buffer = []
-            # reset per-episode tracking 
-            self._reset_current_episode()
+
+            # reset all envs before evaluation
+            for i in range(self.n_eval_envs):
+                self._reset_current_episode(i)
 
             # START EVALUATION
             episode_rewards, episode_lengths = evaluate_policy(
@@ -118,71 +121,71 @@ class CustomEvalCallback(EvalCallback):
     # ──────────────────────────────────────────────────────────────
     #  Per-step callback (called by evaluate_policy on every step)
     # ──────────────────────────────────────────────────────────────
-
     def _log_eval_callback(self, locals_dict: dict, globals_dict: dict) -> None:
-        """
-        custom callback for evaluate_policy that collects detailed metrics.
-        this gets called after each step during evaluation.
-        """
-        try:
-            done = locals_dict["done"]
-            info = locals_dict["info"]
-            reward = locals_dict["reward"]  # ← NEW: grab per-step reward
+            """
+            custom callback for evaluate_policy that collects detailed metrics.
+            this gets called after each step during evaluation.
+            """
+            try:
+                dones = locals_dict["dones"]
+                infos = locals_dict["infos"]
+                rewards = locals_dict["rewards"]
 
-            # initialize episode tracking if needed (empty dict is falsy)
-            if not self.current_episode_data:
-                self._reset_current_episode()
+                for env_idx in range(self.n_eval_envs):
+                    ep = self.current_episode_data[env_idx]
+                    if not ep:
+                        self._reset_current_episode(env_idx)
+                        ep = self.current_episode_data[env_idx]
 
-            state = self.underlying_env.env.state(0)
-            lin_pos = state[3]  # [x, y, z]
-            lin_vel = state[2]  # [u, v, w]
+                    underlying = self.underlying_envs[env_idx]
+                    state = underlying.env.state(0)
+                    lin_pos = state[3]
+                    lin_vel = state[2]
 
-            self.current_episode_data["positions"].append(lin_pos.copy())
-            self.current_episode_data["velocities"].append(lin_vel.copy())
-            self.current_episode_data["step_rewards"].append(float(reward))  # ← NEW
+                    ep["positions"].append(lin_pos.copy())
+                    ep["velocities"].append(lin_vel.copy())
+                    ep["step_rewards"].append(float(rewards[env_idx]))
 
-            # at episode start — capture one-time data
-            if self.current_episode_data["start_position"] is None:
-                self.current_episode_data["start_position"] = lin_pos.copy()
+                    # capture one-time data at episode start
+                    if ep["start_position"] is None:
+                        ep["start_position"] = lin_pos.copy()
 
-                # capture obstacle AABBs (shape-agnostic)
-                if hasattr(self.underlying_env, 'obstacles') and self.underlying_env.obstacles:
-                    obstacles_data = []
-                    for obs_id in self.underlying_env.obstacles:
-                        try:
-                            aabb_min, aabb_max = self.underlying_env.env.getAABB(obs_id)
-                            obstacles_data.append({
-                                'aabb_min': np.array(aabb_min),
-                                'aabb_max': np.array(aabb_max),
-                            })
-                        except Exception as obs_error:
-                            logger.debug(f"Could not capture obstacle {obs_id}: {obs_error}")
-                            continue
-                    self.current_episode_data["obstacles"] = obstacles_data
-                else:
-                    self.current_episode_data["obstacles"] = []
+                        # capture obstacle AABBs (shape-agnostic)
+                        if hasattr(underlying, 'obstacles') and underlying.obstacles:
+                            obstacles_data = []
+                            for obs_id in underlying.obstacles:
+                                try:
+                                    aabb_min, aabb_max = underlying.env.getAABB(obs_id)
+                                    obstacles_data.append({
+                                        'aabb_min': np.array(aabb_min),
+                                        'aabb_max': np.array(aabb_max),
+                                    })
+                                except Exception as obs_error:
+                                    logger.debug(f"[EvalCallback] Could not capture obstacle {obs_id}: {obs_error}")
+                                    continue
+                            ep["obstacles"] = obstacles_data
+                        else:
+                            ep["obstacles"] = []
 
-            if self.current_episode_data["target_position"] is None:
-                self.current_episode_data["target_position"] = (
-                    self.underlying_env.waypoints.targets[0].copy()
-                )
+                    if ep["target_position"] is None:
+                        ep["target_position"] = underlying.waypoints.targets[0].copy()
 
-            # process completed episodes
-            if done:
-                self._process_completed_eval_episode(info)
+                    if dones[env_idx]:
+                        self._process_completed_eval_episode(infos[env_idx], env_idx)
 
-        except Exception as e:
-            logger.error(f"Error in _log_eval_callback: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"[EvalCallback] Error in _log_eval_callback: {e}", exc_info=True)
 
     # ──────────────────────────────────────────────────────────────
     #  Episode processing
     # ──────────────────────────────────────────────────────────────
-
-    def _process_completed_eval_episode(self, info: dict):
+    def _process_completed_eval_episode(self, info: dict, env_idx: int):
         """
         process a completed episode and log metrics to W&B
         """
         try:
+            ep = self.current_episode_data[env_idx]
+
             collision = info["collision"]
             env_complete = info["env_complete"]
             targets_reached = info["num_targets_reached"]
@@ -191,16 +194,12 @@ class CustomEvalCallback(EvalCallback):
 
             success = env_complete and not collision
 
-            path_length = self._calculate_path_length(
-                self.current_episode_data["positions"]
-            )
-            mean_velocity = self._calculate_average_velocity(
-                self.current_episode_data["velocities"]
-            )
+            path_length = self._calculate_path_length(ep["positions"])
+            mean_velocity = self._calculate_average_velocity(ep["velocities"])
             if success:
                 path_efficiency = self._calculate_path_efficiency(
-                    self.current_episode_data["start_position"],
-                    self.current_episode_data["target_position"],
+                    ep["start_position"],
+                    ep["target_position"],
                     path_length,
                 )
             else:
@@ -210,7 +209,7 @@ class CustomEvalCallback(EvalCallback):
             self.current_eval_cycle_data["collision"].append(int(collision))
             self.current_eval_cycle_data["env_complete"].append(int(env_complete))
             self.current_eval_cycle_data["targets_reached"].append(targets_reached)
-            self.current_eval_cycle_data["num_targets"].append(len(self.current_episode_data["target_position"]))
+            self.current_eval_cycle_data["num_targets"].append(len(ep["target_position"]))
             self.current_eval_cycle_data["episode_rewards"].append(episode_reward)
             self.current_eval_cycle_data["episode_lengths"].append(episode_length)
             self.current_eval_cycle_data["num_obstacles"].append(info["num_obstacles"])
@@ -220,30 +219,29 @@ class CustomEvalCallback(EvalCallback):
             self.current_eval_cycle_data["path_efficiencies"].append(path_efficiency)
 
             self.current_eval_cycle_data["positions_history"].append(
-                np.array(self.current_episode_data["positions"]).copy()
+                np.array(ep["positions"]).copy()
             )
             self.current_eval_cycle_data["velocities_history"].append(
-                np.array(self.current_episode_data["velocities"]).copy()
+                np.array(ep["velocities"]).copy()
             )
             self.current_eval_cycle_data["target_position_history"].append(
-                np.array(self.current_episode_data["target_position"]).copy()
+                np.array(ep["target_position"]).copy()
             )
 
-            obstacles = self.current_episode_data["obstacles"]
+            obstacles = ep["obstacles"]
             self.current_eval_cycle_data["obstacles_history"].append(
                 obstacles.copy() if isinstance(obstacles, list) else []
             )
 
-            # ← NEW: store per-step rewards
             self.current_eval_cycle_data["step_rewards_history"].append(
-                np.array(self.current_episode_data["step_rewards"]).copy()
+                np.array(ep["step_rewards"]).copy()
             )
 
             # RESET for next episode
-            self._reset_current_episode()
+            self._reset_current_episode(env_idx)
 
         except Exception as e:
-            logger.error(f"Error in _process_completed_eval_episode: {e}", exc_info=True)
+            logger.error(f"[EvalCallback] Error in _process_completed_eval_episode: {e}", exc_info=True)
 
     # ──────────────────────────────────────────────────────────────
     #  Logging (called once after all eval episodes complete)
@@ -253,7 +251,7 @@ class CustomEvalCallback(EvalCallback):
         """log detailed metrics of a completed evaluation-round to W&B"""
         n_episodes = len(self.current_eval_cycle_data["success"])
         if n_episodes == 0:
-            logger.warning("No episodes were recorded during evaluation — skipping metrics logging.")
+            logger.warning("[EvalCallback] No episodes were recorded during evaluation — skipping metrics logging.")
             return
 
         eval_metrics = {
@@ -269,7 +267,7 @@ class CustomEvalCallback(EvalCallback):
         }
 
         wandb.log(eval_metrics, step=self.num_timesteps)
-        logger.info(f"Eval cycle logged: {n_episodes} episodes, "
+        logger.info(f"[EvalCallback] Eval cycle logged: {n_episodes} episodes, "
                      f"success_rate={eval_metrics['eval_uav/success_rate']:.2f}")
 
         if self.exp_analysis:
@@ -290,7 +288,7 @@ class CustomEvalCallback(EvalCallback):
             failure_df = df[df["success"] == 0]
 
             if success_df.empty or failure_df.empty:
-                logger.debug("Insufficient data for success analysis (need both success and failure episodes)")
+                logger.debug("[EvalCallback] Insufficient data for success analysis (need both success and failure episodes)")
                 return
 
             fig = make_subplots(
@@ -362,7 +360,7 @@ class CustomEvalCallback(EvalCallback):
             )
 
         except Exception as e:
-            logger.exception(f"Error creating success analysis plots: {e}")
+            logger.exception(f"[EvalCallback] Error creating success analysis plots: {e}")
 
     # ──────────────────────────────────────────────────────────────
     #  Trajectory plot  (MODIFIED — deterministic picks + reward width)
@@ -415,13 +413,13 @@ class CustomEvalCallback(EvalCallback):
         try:
             n_episodes = len(self.current_eval_cycle_data["success"])
             if n_episodes == 0:
-                logger.warning("No episodes available for trajectory plotting.")
+                logger.warning("[EvalCallback] No episodes available for trajectory plotting.")
                 return
 
             # ── deterministic episode selection ──────────────────────
             picked = self._pick_trajectory_episodes()
             if not picked:
-                logger.warning("Could not pick any episodes for trajectory plotting.")
+                logger.warning("[EvalCallback] Could not pick any episodes for trajectory plotting.")
                 return
 
             for plot_idx, (ep_idx, label) in enumerate(picked):
@@ -452,11 +450,11 @@ class CustomEvalCallback(EvalCallback):
                 fig = go.Figure()
 
                 # ── boundary wireframe ───────────────────────────────
-                x_min = self.underlying_env.occupancy_grid.x_min
-                x_max = self.underlying_env.occupancy_grid.x_max
-                y_min = self.underlying_env.occupancy_grid.y_min
-                y_max = self.underlying_env.occupancy_grid.y_max
-                z_min, z_max = 0.0, self.underlying_env.z_size
+                x_min = self.underlying_envs[0].occupancy_grid.x_min
+                x_max = self.underlying_envs[0].occupancy_grid.x_max
+                y_min = self.underlying_envs[0].occupancy_grid.y_min
+                y_max = self.underlying_envs[0].occupancy_grid.y_max
+                z_min, z_max = 0.0, self.underlying_envs[0].z_size
 
                 verts = np.array([
                     [x_min, y_min, z_min], [x_max, y_min, z_min],
@@ -641,7 +639,7 @@ class CustomEvalCallback(EvalCallback):
                 )
 
         except Exception as e:
-            logger.exception(f"Error creating trajectory plot: {e}")
+            logger.exception(f"[EvalCallback] Error creating trajectory plot: {e}")
 
     def _log_correlation_matrix(self):
         """Create and log correlation matrix plot to W&B"""
@@ -650,7 +648,7 @@ class CustomEvalCallback(EvalCallback):
             df = df.drop(["positions_history", "velocities_history", "target_position_history", "obstacles_history", "step_rewards_history"], axis=1)
 
             if df.empty:
-                logger.warning("Empty DataFrame for correlation matrix — skipping.")
+                logger.warning("[EvalCallback] Empty DataFrame for correlation matrix — skipping.")
                 return
 
             df["path_efficiencies"] = df["path_efficiencies"].replace(0.0, np.nan)
@@ -675,18 +673,17 @@ class CustomEvalCallback(EvalCallback):
             )
 
         except Exception as e:
-            logger.exception(f"Error creating correlation matrix plot: {e}")
+            logger.exception(f"[EvalCallback] Error creating correlation matrix plot: {e}")
 
     # ──────────────────────────────────────────────────────────────
     #  Helpers
     # ──────────────────────────────────────────────────────────────
 
-    def _reset_current_episode(self):
-        """reset tracking for a new episode"""
-        self.current_episode_data = {
+    def _reset_current_episode(self, env_idx=0):
+        self.current_episode_data[env_idx] = {
             "positions": [],
             "velocities": [],
-            "step_rewards": [],  # ← NEW
+            "step_rewards": [],
             "start_position": None,
             "target_position": None,
             "start_time": self.num_timesteps,

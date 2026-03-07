@@ -56,11 +56,11 @@ def analyse():
     """Analyse environment characteristics using the analyse_env function"""
     from stable_baselines3.common.env_util import make_vec_env
 
-    from uav_nav_obstacle_avoidance_rl.utils import env_helpers
+    from uav_nav_obstacle_avoidance_rl.utils import env_factory
 
     # create env
     vec_env = make_vec_env(
-        env_helpers.make_flat_voyager,
+        env_factory.make_flat_voyager,
         n_envs=1,
         env_kwargs=dict(
             num_targets=1,
@@ -78,11 +78,11 @@ def test_environment_access():
     """quick debug function to test environment state access. check if the Observations are aligned with the state values (velocities and position) from the base env"""
     from stable_baselines3.common.env_util import make_vec_env
 
-    from uav_nav_obstacle_avoidance_rl.utils import env_helpers
+    from uav_nav_obstacle_avoidance_rl.utils import env_factory
 
     # create env
     vec_env = make_vec_env(
-        env_helpers.make_flat_voyager,
+        env_factory.make_flat_voyager,
         n_envs=1,
         env_kwargs=dict(
             num_targets=1,

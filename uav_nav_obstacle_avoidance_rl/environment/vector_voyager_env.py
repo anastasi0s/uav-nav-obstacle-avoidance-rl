@@ -105,7 +105,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
                 "attitude": gym.spaces.Box(
                     low=-np.inf,
                     high=np.inf,
-                    shape=(11,),  # 10 = 2 (yaw position) + 1 (yaw vel) + 3 (lin_vel) + 1 (height) + 4 (1 previous action)
+                    shape=(11,),  # 11 = 2 (yaw position) + 1 (yaw vel) + 3 (lin_vel) + 1 (height) + 4 (1 previous action)
                     dtype=np.float32,
                 ),
                 "target_deltas": gym.spaces.Sequence(
@@ -185,7 +185,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         ang_vel, ang_pos, lin_vel, lin_pos, quaternion = super().compute_attitude()
 
         # create empty array of type float32 and fill it
-        attitude = np.empty(10, dtype=np.float32)
+        attitude = np.empty(11, dtype=np.float32)
         attitude[0] = ang_vel[2]  # (1,) - yaw, rotation velocity
         attitude[1] = np.cos(ang_pos[2])  # yaw cos, rotation position
         attitude[2] = np.sin(ang_pos[2])  # yaw sin

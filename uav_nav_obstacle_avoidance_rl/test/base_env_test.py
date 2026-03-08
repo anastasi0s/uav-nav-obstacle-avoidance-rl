@@ -20,7 +20,7 @@ def analyse_env(env):
         # VecEnv.step returns (obs, rewards, dones, infos)
         obs2, rews, dones, infos = batch
         logger.info(
-            f"VecEnv:\n\nObservation space:\n{env.observation_space}\n\nStacked observations sample:\n{obs}\n\nAction space:\n{env.action_space}\n\nStacked actions sample:\n{actions}\n\nStacked reward samples:\n{rews}\n\nAdditional stacked monitored info:\n{infos}\n"
+            f"VecEnv:\n\nObservation space:\n{env.observation_space}\n\nStacked observations sample:\n{obs}\n\nAction space:\n{env.action_space}\n\nStacked actions sample:\n{actions}\n\nStacked reward samples:\n{rews}\n\nAdditional monitored info of just first env:\n{infos[0]}\n"
         )
     else:
         obs, info = out  # single env returns (obs, info)

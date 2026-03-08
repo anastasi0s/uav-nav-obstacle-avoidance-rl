@@ -32,13 +32,13 @@ class LidarObservationWrapper(gym.ObservationWrapper):
     def __init__(
             self,
             env: gym.Env,
-            num_rays_horizontal: int = 36,
-            num_rays_vertical: int = 1,
-            max_range: float = 10.0,
-            min_range: float = 0.1,
-            fov_horizontal: float = 360.0,
-            fov_vertical: float = 30.0,
-            ray_start_offset: float = 0.15,
+            num_rays_horizontal: int,
+            num_rays_vertical: int,
+            max_range: float,
+            min_range: float,
+            fov_horizontal: float,
+            fov_vertical: float,
+            ray_start_offset: float,
             add_to_obs: Literal["append", "separate", "replace"] = "separate",
     ):
         super().__init__(env)

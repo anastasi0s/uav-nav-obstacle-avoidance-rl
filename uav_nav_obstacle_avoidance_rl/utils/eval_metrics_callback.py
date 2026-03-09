@@ -44,7 +44,7 @@ class CustomEvalCallback(EvalCallback):
         self.current_episode_data = [{} for _ in range(self.n_eval_envs)]
 
         # best model tracking by success rate
-        self.best_success_rate = 0.
+        self.best_success_rate = -1.0
 
     def _on_step(self) -> bool:
         """
@@ -325,44 +325,87 @@ class CustomEvalCallback(EvalCallback):
     # ──────────────────────────────────────────────────────────────
 
     def _log_success_analysis(self):
-        """Log per-episode eval data as a W&B Table for native histogram/pie visualization."""
+        """Create and log success analysis plots to W&B using Plotly"""
         try:
-            n_episodes = len(self.current_eval_cycle_data["success"])
-            if n_episodes == 0:
+            df = pd.DataFrame(self.current_eval_cycle_data)
+
+            success_df = df[df["success"] == 1]
+            failure_df = df[df["success"] == 0]
+
+            if success_df.empty or failure_df.empty:
+                logger.debug("[EvalCallback] Insufficient data for success analysis (need both success and failure episodes)")
                 return
 
-            # build a W&B Table with per-episode scalar data
-            columns = [
-                "episode", "outcome", "failure_reason",
-                "path_length", "mean_velocity", "episode_reward",
-                "episode_length", "targets_reached", "path_efficiency",
+            fig = make_subplots(
+                rows=3,
+                cols=3,
+                subplot_titles=(
+                    "Path Length Distribution",
+                    "Mean Velocity Distribution",
+                    "Episode Reward Distribution",
+                    "Episode Length Distribution",
+                    "Metrics Box Plot Comparison",
+                    "Success vs Failure Rate",
+                    "",
+                    "",
+                    "Failure Reasons Distribution",
+                ),
+                specs=[
+                    [{"secondary_y": False}, {"secondary_y": False}, {"secondary_y": False}],
+                    [{"secondary_y": False}, {"secondary_y": False}, {"type": "domain"}],
+                    [{"secondary_y": False, "colspan": 2}, None, {"type": "domain"}],
+                ],
+            )
+
+            # --- histograms with mean lines ---
+            hist_configs = [
+                ("path_lengths",     "Path Length (m)",   1, 1, "x",  "y domain"),
+                ("mean_velocities",  "Velocity (m/s)",    1, 2, "x2", "y2 domain"),
+                ("episode_rewards",  "Episode Reward",    1, 3, "x3", "y3 domain"),
+                ("episode_lengths",  "Steps per Episode", 2, 1, "x4", "y4 domain"),
             ]
-            table = wandb.Table(columns=columns)
 
-            for i in range(n_episodes):
-                success = self.current_eval_cycle_data["success"][i]
-                collision = self.current_eval_cycle_data["collision"][i]
-                outcome = "Success" if success else "Failure"
-                failure_reason = (
-                    "" if success
-                    else ("Collision" if collision else "Timeout/Other")
-                )
-                table.add_data(
-                    i,
-                    outcome,
-                    failure_reason,
-                    self.current_eval_cycle_data["path_lengths"][i],
-                    self.current_eval_cycle_data["mean_velocities"][i],
-                    self.current_eval_cycle_data["episode_rewards"][i],
-                    self.current_eval_cycle_data["episode_lengths"][i],
-                    self.current_eval_cycle_data["targets_reached"][i],
-                    self.current_eval_cycle_data["path_efficiencies"][i],
-                )
+            for i, (col, xlabel, row, c, xref, yref) in enumerate(hist_configs):
+                show_legend = (i == 0)
+                fig.add_trace(go.Histogram(x=success_df[col], name="Success", marker_color="green", opacity=0.7, nbinsx=20, showlegend=show_legend), row=row, col=c)
+                fig.add_trace(go.Histogram(x=failure_df[col], name="Failure", marker_color="red", opacity=0.7, nbinsx=20, showlegend=show_legend), row=row, col=c)
 
-            wandb.log({"eval_analysis/episode_table": table}, step=self.num_timesteps)
+                for val, color in [(success_df[col].mean(), "darkgreen"), (failure_df[col].mean(), "darkred")]:
+                    fig.add_shape(type="line", x0=val, y0=0, x1=val, y1=1,
+                                  line=dict(color=color, width=2, dash="dash"),
+                                  xref=xref, yref=yref, row=row, col=c)
+
+                fig.update_xaxes(title_text=xlabel, row=row, col=c)
+                fig.update_yaxes(title_text="Frequency", row=row, col=c)
+
+            # --- box plot comparison ---
+            for metric in ["path_lengths", "mean_velocities", "episode_rewards", "episode_lengths"]:
+                fig.add_trace(go.Box(y=success_df[metric], name=f"{metric} (S)", marker_color="lightgreen", showlegend=False), row=2, col=2)
+                fig.add_trace(go.Box(y=failure_df[metric], name=f"{metric} (F)", marker_color="lightcoral", showlegend=False), row=2, col=2)
+
+            # --- pie: success vs failure ---
+            counts = df["success"].value_counts().sort_index()
+            labels = ["Failure" if i == 0 else "Success" for i in counts.index]
+            colors = ["lightcoral" if i == 0 else "lightgreen" for i in counts.index]
+            if len(counts) > 0:
+                fig.add_trace(go.Pie(labels=labels, values=counts.values, marker_colors=colors, showlegend=False), row=2, col=3)
+
+            # --- pie: failure reasons ---
+            n_collision = failure_df["collision"].sum()
+            reasons = {"Collision": n_collision, "Timeout/Other": len(failure_df) - n_collision}
+            reasons = {k: v for k, v in reasons.items() if v > 0}
+            if reasons:
+                fig.add_trace(go.Pie(labels=list(reasons.keys()), values=list(reasons.values()), showlegend=False), row=3, col=3)
+
+            fig.update_layout(height=1200, title_text="Success Analysis Dashboard", showlegend=True)
+
+            wandb.log(
+                {"eval_analysis/success_analysis_dashboard": wandb.Html(fig.to_html(include_plotlyjs="cdn"))},
+                step=self.num_timesteps,
+            )
 
         except Exception as e:
-            logger.exception(f"[EvalCallback] Error logging success analysis table: {e}")
+            logger.exception(f"[EvalCallback] Error creating success analysis plots: {e}")
 
     # ──────────────────────────────────────────────────────────────
     #  Trajectory plot  (MODIFIED — deterministic picks + reward width)

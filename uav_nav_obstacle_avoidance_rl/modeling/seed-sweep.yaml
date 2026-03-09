@@ -1,6 +1,6 @@
 method: grid
-name: seed-sweep
+name: seed-sweep-base-exp
 
 parameters:
   seed:
-    values: [319, 827, 314, 129, 542]
+    values: [319, 827, 314]

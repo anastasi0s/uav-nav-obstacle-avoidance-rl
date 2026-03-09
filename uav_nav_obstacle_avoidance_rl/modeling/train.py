@@ -28,6 +28,7 @@ def _load_config(path: Path = config.EXP_CONFIG_PATH) -> dict:
     with open(path) as f:
         return yaml.safe_load(f)
 
+
 def _train(
     run: wandb.sdk.wandb_run.Run,
     timesteps: int,
@@ -117,8 +118,8 @@ def _train(
 @app.command()
 def run_train(
     exp_name: str = "exp",
-    timesteps: int = 500000,
-    eval_freq: int = 100000,
+    timesteps: int = 500_000,
+    eval_freq: int = 100_000,
     n_envs: int = 2,
     n_eval_episodes: int = 30,
     log_interval: int = 10,
@@ -160,8 +161,8 @@ def run_train(
 def sweep(
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     count: int = 20,
-    timesteps: int = 500000,
-    eval_freq: int = 100000,
+    timesteps: int = 500_000,
+    eval_freq: int = 100_000,
     n_envs: int = 2,
     n_eval_episodes: int = 30,
     log_interval: int = 10,
@@ -207,8 +208,8 @@ def sweep(
 @app.command()
 def seed_sweep(
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
-    timesteps: int = 500000,
-    eval_freq: int = 100000,
+    timesteps: int = 500_000,
+    eval_freq: int = 100_000,
     n_envs: int = 2,
     n_eval_episodes: int = 30,
     log_interval: int = 10,

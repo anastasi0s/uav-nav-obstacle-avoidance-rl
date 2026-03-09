@@ -45,12 +45,12 @@ def make_flat_voyager(**env_kwargs):
     if perception_mode == "lidar":
         env = LidarObservationWrapper(env, **lidar_kwargs)
 
-    # 3.reward wrappers
-    if reward_type == "pyflyt":
-        env = PyFlytRewardWrapper(env, **reward_kwargs)
-    elif reward_type == "custom":
-        # works only with ray cast (lidar) measurements !!!
-        env = CustomRewardWrapper(env, **reward_kwargs)
+    # # 3.reward wrappers
+    # if reward_type == "pyflyt":
+    #     env = PyFlytRewardWrapper(env, **reward_kwargs)
+    # elif reward_type == "custom":
+    #     # works only with ray cast (lidar) measurements !!!
+    #     env = CustomRewardWrapper(env, **reward_kwargs)
 
     # 4. normalization wrappers - normalize actions and observations (works with and without lidar)
     # env = RescaleAction(env, min_action=-1.0, max_action=1.0)

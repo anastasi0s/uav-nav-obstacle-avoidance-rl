@@ -184,6 +184,7 @@ def sweep(
     def _sweep_train():
         with wandb.init(
             config=exp_config,
+            group=sweep_id,
             dir=config.REPORTS_DIR.as_posix(),
             settings=wandb.Settings(x_disable_stats=True),
         ) as run:
@@ -232,6 +233,7 @@ def seed_sweep(
     def _seed_sweep_train():
         with wandb.init(
             config=exp_config,
+            group=sweep_id,
             dir=config.REPORTS_DIR.as_posix(),
             settings=wandb.Settings(x_disable_stats=True),
         ) as run:

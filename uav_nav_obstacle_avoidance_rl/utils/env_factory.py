@@ -1,5 +1,4 @@
 from gymnasium.wrappers import RescaleAction
-
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecVideoRecorder
 
@@ -14,12 +13,13 @@ from uav_nav_obstacle_avoidance_rl.environment.lidar_wrapper import (
 from uav_nav_obstacle_avoidance_rl.environment.normalize_obs_wrapper import (
     NormalizeObservationWrapper,
 )
+from uav_nav_obstacle_avoidance_rl.environment.reward_wrapper import PyFlytRewardWrapper, CustomRewardWrapper
 from uav_nav_obstacle_avoidance_rl.environment.vector_voyager_env import (
     VectorVoyagerEnv,
 )
 
 
-# create flat pyflyt environment
+# Env chain: Aviary (PyBullet) -> QuadXBaseEnv -> VectorVoyagerEnv -> LidarObservationWrapper -> CustomRewardWrapper -> RescaleAction -> NormalizeObservationWrapper -> LidarFlattenWrapper -> DummyVecEnv
 def make_flat_voyager(**env_kwargs):
     """
     Create a flattened Vector Voyager environment
@@ -28,11 +28,16 @@ def make_flat_voyager(**env_kwargs):
         **env_kwargs: Additional arguments for the environment (including num_targets).
             perception_mode: "lidar" or "none" (default "none")
             lidar: dict of LidarObservationWrapper kwargs
+            reward: dict of reward wrapper kwargs
     """
     # extract wrapper-specific parameters (not accepted by VectorVoyagerEnv)
     perception_mode = env_kwargs.pop("perception_mode")
     lidar_kwargs = env_kwargs.pop("lidar")
+    reward_config = env_kwargs.pop("reward")
     num_targets = env_kwargs.get("num_targets")
+
+    # reward_type = reward_config["type"]
+    # reward_kwargs = reward_config[reward_type]  # select the active sub-dict
 
     # create base environment
     env = VectorVoyagerEnv(**env_kwargs)
@@ -40,9 +45,14 @@ def make_flat_voyager(**env_kwargs):
     if perception_mode == "lidar":
         env = LidarObservationWrapper(env, **lidar_kwargs)
 
-    # normalize actions
+        # # custom reward works only with ray cast (lidar) measurements
+        # if reward_type == "pyflyt":
+        #     env = PyFlytRewardWrapper(env, **reward_kwargs)
+        # elif reward_type == "custom":
+        #     env = CustomRewardWrapper(env, **reward_kwargs)
+
+    # # normalize actions and observations (works with and without lidar)
     # env = RescaleAction(env, min_action=-1.0, max_action=1.0)
-    # normalize observations (works with and without lidar)
     # env = NormalizeObservationWrapper(env)
 
     # flatten env

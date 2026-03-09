@@ -7,17 +7,17 @@ env:
   min_height: 0.01                  # min flight height; collision below this
 
   # Waypoints
-  num_targets: 1                    # (controlled by curriculum learning)
-  target_distance_range: null       # [min_r, max_r] or None for unconstrained; set by curriculum
+  num_targets: 1                    # [curriculum]
+  target_distance_range: null       # [curriculum] [min_r, max_r] or None for unconstrained
   sparse_reward: false
   use_yaw_targets: false            # toggles whether the agent must also align its yaw (heading) to a per‐waypoint target before that waypoint is considered “reached,” and whether yaw error is included in the observation.
   goal_reach_distance: 0.2          # distance in meters within which the target is considered reached
   goal_reach_angle: 0.1             # radians
 
   # Obstacles
-  num_obstacles_range: null       # [int, int] | null (controlled by curriculum learning) 
-  obstacle_shapes: ['cylinder']     # ['cylinder', 'box', 'sphere'] | null
-  obstacle_size_range: [0.5, 0.5]   # [min, max] | null fraction of cell_size
+  num_obstacles_range: null         # [curriculum] [int, int] | null 
+  obstacle_shapes: ['cylinder']     # [curriculum] ['cylinder', 'box', 'sphere'] | null
+  obstacle_size_range: [0.5, 0.5]   # [curriculum] [min, max] | null fraction of cell_size
   visual_obstacles: false           # render meshes (for eval only)
 
   # Simulation --- with agent_hz=30 and 80s/episode, an episode is up to ~2400 steps
@@ -38,7 +38,7 @@ env:
     fov_horizontal: 360.0           # degrees  # XXX adjust angle calculations in lidar wrapper if < 360.0
     fov_vertical: 30.0              # degrees
     ray_start_offset: 0.15          # meters from drone center
-    normalize_distances: true
+    normalize_distances: false
     add_to_obs: "separate"          # append | separate | replace
 
   # Reward Signal — select wrapper via `type`
@@ -71,7 +71,7 @@ env:
 # When curriculum is disabled, env defaults above are used directly.
 # When enabled, each stage overrides env defaults for difficulty parameters.
 curriculum:
-  enabled: true
+  enabled: false
   advance_threshold: 0.8
   advance_patience: 5
   regress_threshold: 0.4

@@ -21,8 +21,9 @@ logger = config.logger
 
 MONITOR_INFO_KEYWORDS = ("collision", "env_complete", "num_targets_reached", "num_obstacles")
 
+a_seed = 319
 
-def load_config(path: Path = config.EXP_CONFIG_PATH) -> dict:
+def _load_config(path: Path = config.EXP_CONFIG_PATH) -> dict:
     """Load experiment config from YAML."""
     with open(path) as f:
         return yaml.safe_load(f)
@@ -38,7 +39,7 @@ def _train(
     exp_analysis: bool,
     verbose: int,
 ):
-    """training logic used by both run_exp and sweep agents"""
+    """training logic used by both run_train and sweep agents"""
     env_config = dict(run.config["env"])
     ppo_config = dict(run.config["ppo"])
     curriculum_config = dict(run.config["curriculum"])
@@ -54,7 +55,8 @@ def _train(
     )
 
     base_env_test.analyse_env(vec_env)
-
+    
+    # create separate evaluation env
     vec_env_eval = make_vec_env(
         env_factory.make_flat_voyager,
         n_envs=n_envs,
@@ -83,6 +85,7 @@ def _train(
         render=False,
         verbose=verbose,
         exp_analysis=exp_analysis,
+        seed=seed,
     )
 
     callbacks.append(wandb_callback)
@@ -110,15 +113,16 @@ def _train(
         log_interval=log_interval,
     )
 
+
 @app.command()
-def run_exp(
+def run_train(
     exp_name: str = "exp",
     timesteps: int = 500000,
     eval_freq: int = 100000,
     n_envs: int = 2,
     n_eval_episodes: int = 30,
     log_interval: int = 10,
-    seed: int = config.RANDOM_SEED,
+    seed: int = a_seed,
     exp_analysis: bool = True,
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     wandb_tags: list[str] | None = None,
@@ -128,7 +132,7 @@ def run_exp(
     training script with W&B integration for experiment tracking
     """
 
-    exp_config = load_config()
+    exp_config = _load_config()
     with wandb.init(
         project=wandb_project,
         name=exp_name,
@@ -151,6 +155,7 @@ def run_exp(
             verbose=verbose,
         )
 
+
 @app.command()
 def sweep(
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
@@ -160,7 +165,7 @@ def sweep(
     n_envs: int = 2,
     n_eval_episodes: int = 30,
     log_interval: int = 10,
-    seed: int = config.RANDOM_SEED,
+    seed: int = a_seed,
     verbose: int = 0,
     sweep_id: Optional[str] = None,
 ):
@@ -170,7 +175,7 @@ def sweep(
     create new sweep (or resume existing --sweep-id) and launches
     an agent that runs `count` training runs each with different hyperparameters sampled by the sweep controller
     """
-    exp_config = load_config()
+    exp_config = _load_config()
 
     def _sweep_train():
         with wandb.init(
@@ -191,12 +196,59 @@ def sweep(
             )
 
     if sweep_id is None:
-        sweep_config = load_config(config.SWEEP_CONFIG_PATH)
+        sweep_config = _load_config(config.SWEEP_CONFIG_PATH)
         sweep_id = wandb.sweep(sweep=sweep_config, project=wandb_project)
         logger.info(f"Created sweep with ID: {sweep_id}")
 
     logger.info(f"Starting sweep agent (sweep_id={sweep_id}, count={count})")
     wandb.agent(sweep_id, function=_sweep_train, count=count, project=wandb_project)
+
+
+@app.command()
+def seed_sweep(
+    wandb_project: str = "uav-nav-obstacle-avoidance-rl",
+    timesteps: int = 500000,
+    eval_freq: int = 100000,
+    n_envs: int = 2,
+    n_eval_episodes: int = 30,
+    log_interval: int = 10,
+    verbose: int = 0,
+    sweep_id: Optional[str] = None,
+):
+    """
+    Run the same experiment with multiple seeds using a W&B grid sweep.
+
+    Seeds are defined in seed-sweep.yaml. Each seed becomes a separate
+    W&B run, grouped together for easy comparison and aggregation.
+    """
+    exp_config = _load_config()
+
+    def _seed_sweep_train():
+        with wandb.init(
+            config=exp_config,
+            dir=config.REPORTS_DIR.as_posix(),
+            settings=wandb.Settings(x_disable_stats=True),
+        ) as run:
+            seed = run.config["seed"]
+            _train(
+                run=run,
+                timesteps=timesteps,
+                eval_freq=eval_freq,
+                n_envs=n_envs,
+                n_eval_episodes=n_eval_episodes,
+                log_interval=log_interval,
+                seed=seed,
+                exp_analysis=False,
+                verbose=verbose,
+            )
+
+    if sweep_id is None:
+        sweep_config = _load_config(config.SEED_SWEEP_CONFIG_PATH)
+        sweep_id = wandb.sweep(sweep=sweep_config, project=wandb_project)
+        logger.info(f"Created seed sweep with ID: {sweep_id}")
+
+    logger.info(f"Starting seed sweep agent (sweep_id={sweep_id})")
+    wandb.agent(sweep_id, function=_seed_sweep_train, project=wandb_project)
 
 
 if __name__ == "__main__":

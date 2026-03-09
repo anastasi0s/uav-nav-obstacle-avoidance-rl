@@ -1,4 +1,6 @@
 from pathlib import Path
+from typing import Optional
+import torch
 
 import typer
 import wandb
@@ -25,9 +27,92 @@ def load_config(path: Path = config.EXP_CONFIG_PATH) -> dict:
     with open(path) as f:
         return yaml.safe_load(f)
 
+def _train(
+    run: wandb.sdk.wandb_run.Run,
+    timesteps: int,
+    eval_freq: int,
+    n_envs: int,
+    n_eval_episodes: int,
+    log_interval: int,
+    seed: int,
+    exp_analysis: bool,
+    verbose: int,
+):
+    """training logic used by both run_exp and sweep agents"""
+    env_config = dict(run.config["env"])
+    ppo_config = dict(run.config["ppo"])
+    curriculum_config = dict(run.config["curriculum"])
+    monitor_info = {"info_keywords": MONITOR_INFO_KEYWORDS}
+
+    # ----- create environments --------
+    vec_env = make_vec_env(
+        env_factory.make_flat_voyager,
+        n_envs=n_envs,
+        env_kwargs={**env_config, "visual_obstacles": False},
+        monitor_kwargs=monitor_info,
+
+    )
+
+    base_env_test.analyse_env(vec_env)
+
+    vec_env_eval = make_vec_env(
+        env_factory.make_flat_voyager,
+        n_envs=n_envs,
+        env_kwargs=env_config,
+        monitor_kwargs=monitor_info,
+    )
+
+    # ----- callbacks --------
+    callbacks = []
+    wandb_callback = WandbCallback(verbose=verbose)
+
+    train_callback = TrainMetricsCallback(
+        run_path=run.dir,
+        verbose=verbose,
+    )
+
+    adj_eval_freq = eval_freq // n_envs
+    adj_n_eval_episodes = n_eval_episodes // n_envs
+    eval_callback = CustomEvalCallback(
+        vec_env_eval,
+        best_model_save_path=f"{run.dir}/models",
+        log_path=run.dir,
+        eval_freq=adj_eval_freq,
+        n_eval_episodes=adj_n_eval_episodes,
+        deterministic=True,
+        render=False,
+        verbose=verbose,
+        exp_analysis=exp_analysis,
+    )
+
+    callbacks.append(wandb_callback)
+    callbacks.append(train_callback)
+    callbacks.append(eval_callback)
+
+    if curriculum_config.pop('enabled', False):
+        curriculum_callback = CurriculumCallback(**curriculum_config, verbose=verbose, eval_env=vec_env_eval)
+        callbacks.append(curriculum_callback)
+
+    model = PPO(
+        "MlpPolicy",
+        vec_env,
+        **ppo_config,
+        verbose=verbose,
+        tensorboard_log=f"{run.dir}/tensorboard",
+        seed=seed,
+        device="cpu",
+    )
+
+    model.learn(
+        total_timesteps=timesteps,
+        callback=callbacks,
+        progress_bar=True,
+        log_interval=log_interval,
+    )
+
 @app.command()
 def run_exp(
-    exp_name: str = "exp_0",
+    exp_name: str = "exp",
     timesteps: int = 500000,
     eval_freq: int = 100000,
     n_envs: int = 2,
@@ -43,8 +128,6 @@ def run_exp(
     training script with W&B integration for experiment tracking
     """
 
-    # ----- 1. load config & init W&B --------
-
     exp_config = load_config()
     with wandb.init(
         project=wandb_project,
@@ -52,99 +135,68 @@ def run_exp(
         tags=wandb_tags,
         config=exp_config,
         dir=config.REPORTS_DIR.as_posix(),
-        monitor_gym=True,  # auto-upload videos
+        monitor_gym=True,
         settings=wandb.Settings(x_disable_stats=True)
         ) as run:
 
-        env_config = dict(run.config["env"])
-        ppo_config = dict(run.config["ppo"])
-        curriculum_config = dict(run.config["curriculum"])
-        monitor_info = {"info_keywords": MONITOR_INFO_KEYWORDS}
-
-        # ----- 2. create environments --------
-        # create training environment (never visual obstacles for performance)
-        vec_env = make_vec_env(
-            env_factory.make_flat_voyager,
-            n_envs=n_envs,
-            env_kwargs={**env_config, "visual_obstacles": False},
-            monitor_kwargs=monitor_info,
-            )
-        
-        # # analyze train environment
-        base_env_test.analyse_env(vec_env)
-
-        # create separate evaluation environment
-        vec_env_eval = make_vec_env(
-            env_factory.make_flat_voyager,
-            n_envs=n_envs,  # single env for evaluation - simple and clean
-            env_kwargs=env_config,
-            monitor_kwargs=monitor_info,
-        )
-
-        # ----- 3. callbacks --------
-        callbacks = []
-        # add W&B callback
-        wandb_callback = WandbCallback(
-            # gradient_save_freq=1000,
-            verbose=verbose,
-        )
-
-        # add custom train metrics callback
-        train_callback = TrainMetricsCallback(
-            run_path=run.dir,
-            # model_save_path=f"{run.dir}/models",
-            verbose=verbose,
-        )
-
-        eval_freq = eval_freq // n_envs  # calculate eval frequency based on parallel environments -> eval_freq = actual time-steps
-        n_eval_episodes = n_eval_episodes // n_envs
-        # add custom evaluation metrics callback
-        eval_callback = CustomEvalCallback(
-            vec_env_eval,
-            best_model_save_path=f"{run.dir}/models",
-            log_path=run.dir,
+        _train(
+            run=run,
+            timesteps=timesteps,
             eval_freq=eval_freq,
+            n_envs=n_envs,
             n_eval_episodes=n_eval_episodes,
-            deterministic=True,
-            render=False,
-            verbose=verbose,
-            exp_analysis=exp_analysis,
-        )
-        
-        callbacks.append(wandb_callback)
-        callbacks.append(train_callback)
-        callbacks.append(eval_callback)
-
-        # add curriculum callback
-        if curriculum_config.pop('enabled', False):
-            curriculum_callback = CurriculumCallback(**curriculum_config, verbose=verbose, eval_env=vec_env_eval)
-            callbacks.append(curriculum_callback)
-
-        # ----- 4. define and train model --------
-        model = PPO(
-            "MlpPolicy",
-            vec_env,
-            **ppo_config,
-            verbose=verbose,
-            tensorboard_log=f"{run.dir}/tensorboard",
-            seed=seed,  # the seed is passed through the chain: (PPO → Gymnasium → QuadXBaseEnv → Aviary → VectorVoyagerEnv → VoxelGrid)
-        )
-
-        # train model
-        model.learn(
-            total_timesteps=timesteps,
-            callback=callbacks,
-            progress_bar=True,
             log_interval=log_interval,
+            seed=seed,
+            exp_analysis=exp_analysis,
+            verbose=verbose,
         )
-
 
 @app.command()
-def sweep():
+def sweep(
+    wandb_project: str = "uav-nav-obstacle-avoidance-rl",
+    count: int = 20,
+    timesteps: int = 500000,
+    eval_freq: int = 100000,
+    n_envs: int = 2,
+    n_eval_episodes: int = 30,
+    log_interval: int = 10,
+    seed: int = config.RANDOM_SEED,
+    verbose: int = 0,
+    sweep_id: Optional[str] = None,
+):
     """
-    Run a hyperparameter sweep using W&B.
+    wandb sweep using Bayesian optimization
+
+    create new sweep (or resume existing --sweep-id) and launches
+    an agent that runs `count` training runs each with different hyperparameters sampled by the sweep controller
     """
-    pass
+    exp_config = load_config()
+
+    def _sweep_train():
+        with wandb.init(
+            config=exp_config,
+            dir=config.REPORTS_DIR.as_posix(),
+            settings=wandb.Settings(x_disable_stats=True),
+        ) as run:
+            _train(
+                run=run,
+                timesteps=timesteps,
+                eval_freq=eval_freq,
+                n_envs=n_envs,
+                n_eval_episodes=n_eval_episodes,
+                log_interval=log_interval,
+                seed=seed,
+                exp_analysis=False,
+                verbose=verbose,
+            )
+
+    if sweep_id is None:
+        sweep_config = load_config(config.SWEEP_CONFIG_PATH)
+        sweep_id = wandb.sweep(sweep=sweep_config, project=wandb_project)
+        logger.info(f"Created sweep with ID: {sweep_id}")
+
+    logger.info(f"Starting sweep agent (sweep_id={sweep_id}, count={count})")
+    wandb.agent(sweep_id, function=_sweep_train, count=count, project=wandb_project)
 
 
 if __name__ == "__main__":

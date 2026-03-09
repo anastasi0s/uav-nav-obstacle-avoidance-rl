@@ -1,7 +1,7 @@
 # ── Environment ──────────────────────────────────────────────
 env:
-  start_pos: [0.0, 0.0, 1.0]              # UAV start position
-  # Boundary
+  # Space
+  start_pos: [0.0, 0.0, 1.0]        # UAV start position
   grid_sizes: [50.0, 50.0, 5.0]     # [x, y, z] in meters — occupancy grid uses (x, y), z is for wall/obstacle height
   cell_size: 1.0                    # 2D occupancy grid cell size (meters)
   min_height: 0.01                  # min flight height; collision below this
@@ -15,9 +15,9 @@ env:
   goal_reach_angle: 0.1             # radians
 
   # Obstacles
-  num_obstacles_range: [0, 3]       # (controlled by curriculum learning)
-  obstacle_shapes: ['cylinder']     # ['cylinder', 'box', 'sphere']
-  obstacle_size_range: [0.5, 0.5]   # [min, max] fraction of cell_size
+  num_obstacles_range: null       # [int, int] | null (controlled by curriculum learning) 
+  obstacle_shapes: ['cylinder']     # ['cylinder', 'box', 'sphere'] | null
+  obstacle_size_range: [0.5, 0.5]   # [min, max] | null fraction of cell_size
   visual_obstacles: false           # render meshes (for eval only)
 
   # Simulation --- with agent_hz=30 and 80s/episode, an episode is up to ~2400 steps
@@ -40,6 +40,32 @@ env:
     ray_start_offset: 0.15          # meters from drone center
     normalize_distances: true
     add_to_obs: "separate"          # append | separate | replace
+
+  # Reward Signal — select wrapper via `type`
+  reward:
+    type: "pyflyt"              # "pyflyt" | "custom"
+
+    # ── PyFlytRewardWrapper (baseline, no obstacle awareness) ──
+    # r_t = -P + max(3*progress, 0) + 0.1/dist + r_collision + r_target
+    pyflyt:
+      step_penalty: 0.1            # alive penalty P
+      collision_penalty: 100.0     # terminal penalty C on collision
+      target_reached_bonus: 100.0  # discrete bonus B for reaching a waypoint
+      sparse_reward: false         # skip dense shaping (progress + distance) when true
+
+    # ── RewardWrapper (lidar-aware, obstacle avoidance) ──
+    # r_t = w_prog * r_prog + w_obs * r_obs + r_collision + r_target + r_step
+    custom:
+      d_attention: 5.0          # radius where obstacles start mattering
+      d_danger: 1.0             # radius for steep proximity penalty
+      d_floor: 0.1              # minimum distance for log functions
+      obs_lambda: 1.0           # weight for min-proximity term
+      w_prog: 1.0               # weight for progress reward
+      w_obs: 0.01               # weight for obstacle avoidance reward
+      collision_penalty: 10.0   # terminal penalty C
+      target_reached_bonus: 10.0  # discrete bonus B
+      step_penalty: 0.01         # time cost P
+
 
 # ── Curriculum Learning ──────────────────────────────────────
 # When curriculum is disabled, env defaults above are used directly.

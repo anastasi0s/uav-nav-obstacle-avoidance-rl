@@ -21,6 +21,7 @@ REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = REPORTS_DIR / "run.log"
 
 EXP_CONFIG_PATH = PROJ_ROOT / "uav_nav_obstacle_avoidance_rl" / "modeling" / "config-defaults.yaml"
+SWEEP_CONFIG_PATH = PROJ_ROOT / "uav_nav_obstacle_avoidance_rl" / "modeling" / "sweep-config.yaml"
 
 
 # LOGGING ------------------------------------------------------------------------------------------------- #

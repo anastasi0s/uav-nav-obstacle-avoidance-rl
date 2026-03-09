@@ -3,4 +3,4 @@ name: seed-sweep
 
 parameters:
   seed:
-    values: [319, 320, 321, 322, 323]
+    values: [319, 827, 314, 129, 542]

@@ -18,13 +18,21 @@ class CustomEvalCallback(EvalCallback):
     Initialize evaluation cycle in the _on_step() function.
     """
 
+    # reward component keys emitted by RewardWrapper
+    REWARD_COMPONENTS = [
+        "reward_total", "reward_progress", "reward_obstacle", "reward_collision", "reward_target", "reward_step",
+        # obstacle sub-components
+        "reward_obs_approaching", "reward_obs_weighting", "reward_obs_mean_approach_penalty", "reward_obs_proximity",
+    ]
+
     def __init__(self, *args, **kwargs):
         self.exp_analysis = kwargs.pop("exp_analysis", True)
+        seed = kwargs.pop("seed", None)
 
         # initialize parent with remaining kwargs
         super().__init__(*args, **kwargs)
 
-        self.rng = np.random.default_rng(config.RANDOM_SEED)
+        self.rng = np.random.default_rng(seed)
 
         #  get all parallel underlying_envs in a list
         if hasattr(self.eval_env, "envs"):
@@ -36,7 +44,7 @@ class CustomEvalCallback(EvalCallback):
         self.current_episode_data = [{} for _ in range(self.n_eval_envs)]
 
         # best model tracking by success rate
-        self.best_success_rate = -1.0
+        self.best_success_rate = 0.
 
     def _on_step(self) -> bool:
         """
@@ -77,7 +85,11 @@ class CustomEvalCallback(EvalCallback):
                 "velocities_history": [],
                 "target_position_history": [],
                 "obstacles_history": [],
-                "step_rewards_history": [],  # ← NEW: per-step rewards for each episode
+                "step_rewards_history": [],
+                # per-episode reward component sums
+                **{f"{k}_sum": [] for k in self.REWARD_COMPONENTS},
+                # per-episode per-step reward component histories (for trajectory plots)
+                **{f"{k}_history": [] for k in self.REWARD_COMPONENTS},
             }
             self._is_success_buffer = []
 
@@ -102,7 +114,7 @@ class CustomEvalCallback(EvalCallback):
 
             success_rate = float(np.mean(self.current_eval_cycle_data["success"]))
 
-            # save best model by success rate
+            # save best model and generate analysis plots on new best success rate
             if success_rate > self.best_success_rate:
                 logger.info(f"Saved new best model with success rate: {success_rate:.2%} (prev: {self.best_success_rate:.2%})")
                 if self.best_model_save_path is not None:
@@ -112,6 +124,13 @@ class CustomEvalCallback(EvalCallback):
                         os.path.join(self.best_model_save_path, "best_model_success_rate")
                     )
                 self.best_success_rate = success_rate
+
+                # generate analysis plots only when we achieve a new best
+                if self.exp_analysis:
+                    self._log_success_analysis()
+                    self._log_trajectory_plot()
+                    self._log_reward_decomposition_plot()
+                    # self._log_correlation_matrix()
 
             if self.callback is not None:
                 continue_training = continue_training and self._on_event()
@@ -145,6 +164,12 @@ class CustomEvalCallback(EvalCallback):
                     ep["positions"].append(lin_pos.copy())
                     ep["velocities"].append(lin_vel.copy())
                     ep["step_rewards"].append(float(rewards[env_idx]))
+
+                    # accumulate per-step reward components from RewardWrapper
+                    step_info = infos[env_idx]
+                    for key in self.REWARD_COMPONENTS:
+                        if key in step_info:
+                            ep[key].append(float(step_info[key]))
 
                     # capture one-time data at episode start
                     if ep["start_position"] is None:
@@ -237,6 +262,16 @@ class CustomEvalCallback(EvalCallback):
                 np.array(ep["step_rewards"]).copy()
             )
 
+            # store reward component episode sums and per-step histories
+            for key in self.REWARD_COMPONENTS:
+                values = ep[key]
+                self.current_eval_cycle_data[f"{key}_sum"].append(
+                    float(np.sum(values)) if values else 0.0
+                )
+                self.current_eval_cycle_data[f"{key}_history"].append(
+                    np.array(values).copy() if values else np.array([])
+                )
+
             # RESET for next episode
             self._reset_current_episode(env_idx)
 
@@ -254,151 +289,120 @@ class CustomEvalCallback(EvalCallback):
             logger.warning("[EvalCallback] No episodes were recorded during evaluation — skipping metrics logging.")
             return
 
+        # reward component means across eval episodes
+        reward_component_metrics = {}
+        for key in self.REWARD_COMPONENTS:
+            component_name = key.replace("reward_", "")
+            sums = self.current_eval_cycle_data[f"{key}_sum"]
+            if sums:
+                # ep_sum_eval = per-episode reward sum, averaged over the eval cycle
+                reward_component_metrics[f"eval_cycle_cum_reward/{component_name}_cycle"] = float(np.mean(sums))
+
         eval_metrics = {
-            "eval_uav/success_rate": np.mean(self.current_eval_cycle_data["success"]),
-            "eval_uav/collision_rate": np.mean(self.current_eval_cycle_data["collision"]),
-            "eval_uav/completion_rate": np.mean(self.current_eval_cycle_data["env_complete"]),
-            "eval_uav/targets_reached_mean": np.mean(self.current_eval_cycle_data["targets_reached"]),
-            "eval_uav/avg_velocity_mean": np.mean(self.current_eval_cycle_data["mean_velocities"]),
-            "eval_uav/path_length_mean": np.mean(self.current_eval_cycle_data["path_lengths"]),
-            "eval_uav/path_efficiency_mean": np.mean(self.current_eval_cycle_data["path_efficiencies"]),
-            "eval_uav/ep_reward_mean": np.mean(self.current_eval_cycle_data["episode_rewards"]),
-            "eval_uav/ep_length_mean": np.mean(self.current_eval_cycle_data["episode_lengths"]),
+            # success = all targets reached AND no collision
+            # _cycle suffix = averaged over all episodes in this eval cycle
+            "eval_cycle/success_rate": np.mean(self.current_eval_cycle_data["success"]),
+            "eval_cycle/collision_rate": np.mean(self.current_eval_cycle_data["collision"]),
+            # all_targets_reached_rate = env_complete (targets reached, regardless of collision)
+            "eval_cycle/all_targets_reached_rate": np.mean(self.current_eval_cycle_data["env_complete"]),
+            "eval_cycle/targets_reached": np.mean(self.current_eval_cycle_data["targets_reached"]),
+            "eval_cycle/mean_velocity": np.mean(self.current_eval_cycle_data["mean_velocities"]),
+            "eval_cycle/path_length": np.mean(self.current_eval_cycle_data["path_lengths"]),
+            "eval_cycle/path_efficiency": np.mean(self.current_eval_cycle_data["path_efficiencies"]),
+            "eval_cycle/ep_length": np.mean(self.current_eval_cycle_data["episode_lengths"]),
+            # reward decomposition
+            **reward_component_metrics,
         }
 
         wandb.log(eval_metrics, step=self.num_timesteps)
         logger.info(f"[EvalCallback] Eval cycle logged: {n_episodes} episodes, "
-                     f"success_rate={eval_metrics['eval_uav/success_rate']:.2f}")
+                     f"success_rate={eval_metrics['eval_cycle/success_rate']:.2f}, "
+                     f"all_targets_reached_rate={eval_metrics['eval_cycle/all_targets_reached_rate']:.2f}")
 
-        if self.exp_analysis:
-            self._log_success_analysis()
-            self._log_trajectory_plot()
-            self._log_correlation_matrix()
 
     # ──────────────────────────────────────────────────────────────
     #  Analysis plots
     # ──────────────────────────────────────────────────────────────
 
     def _log_success_analysis(self):
-        """Create and log success analysis plots to W&B using Plotly"""
+        """Log per-episode eval data as a W&B Table for native histogram/pie visualization."""
         try:
-            df = pd.DataFrame(self.current_eval_cycle_data)
-
-            success_df = df[df["success"] == 1]
-            failure_df = df[df["success"] == 0]
-
-            if success_df.empty or failure_df.empty:
-                logger.debug("[EvalCallback] Insufficient data for success analysis (need both success and failure episodes)")
+            n_episodes = len(self.current_eval_cycle_data["success"])
+            if n_episodes == 0:
                 return
 
-            fig = make_subplots(
-                rows=3,
-                cols=3,
-                subplot_titles=(
-                    "Path Length Distribution",
-                    "Mean Velocity Distribution",
-                    "Episode Reward Distribution",
-                    "Episode Length Distribution",
-                    "Metrics Box Plot Comparison",
-                    "Success vs Failure Rate",
-                    "",
-                    "",
-                    "Failure Reasons Distribution",
-                ),
-                specs=[
-                    [{"secondary_y": False}, {"secondary_y": False}, {"secondary_y": False}],
-                    [{"secondary_y": False}, {"secondary_y": False}, {"type": "domain"}],
-                    [{"secondary_y": False, "colspan": 2}, None, {"type": "domain"}],
-                ],
-            )
-
-            # --- histograms with mean lines ---
-            hist_configs = [
-                ("path_lengths",     "Path Length (m)",   1, 1, "x",  "y domain"),
-                ("mean_velocities",  "Velocity (m/s)",    1, 2, "x2", "y2 domain"),
-                ("episode_rewards",  "Episode Reward",    1, 3, "x3", "y3 domain"),
-                ("episode_lengths",  "Steps per Episode", 2, 1, "x4", "y4 domain"),
+            # build a W&B Table with per-episode scalar data
+            columns = [
+                "episode", "outcome", "failure_reason",
+                "path_length", "mean_velocity", "episode_reward",
+                "episode_length", "targets_reached", "path_efficiency",
             ]
+            table = wandb.Table(columns=columns)
 
-            for i, (col, xlabel, row, c, xref, yref) in enumerate(hist_configs):
-                show_legend = (i == 0)
-                fig.add_trace(go.Histogram(x=success_df[col], name="Success", marker_color="green", opacity=0.7, nbinsx=20, showlegend=show_legend), row=row, col=c)
-                fig.add_trace(go.Histogram(x=failure_df[col], name="Failure", marker_color="red", opacity=0.7, nbinsx=20, showlegend=show_legend), row=row, col=c)
+            for i in range(n_episodes):
+                success = self.current_eval_cycle_data["success"][i]
+                collision = self.current_eval_cycle_data["collision"][i]
+                outcome = "Success" if success else "Failure"
+                failure_reason = (
+                    "" if success
+                    else ("Collision" if collision else "Timeout/Other")
+                )
+                table.add_data(
+                    i,
+                    outcome,
+                    failure_reason,
+                    self.current_eval_cycle_data["path_lengths"][i],
+                    self.current_eval_cycle_data["mean_velocities"][i],
+                    self.current_eval_cycle_data["episode_rewards"][i],
+                    self.current_eval_cycle_data["episode_lengths"][i],
+                    self.current_eval_cycle_data["targets_reached"][i],
+                    self.current_eval_cycle_data["path_efficiencies"][i],
+                )
 
-                for val, color in [(success_df[col].mean(), "darkgreen"), (failure_df[col].mean(), "darkred")]:
-                    fig.add_shape(type="line", x0=val, y0=0, x1=val, y1=1,
-                                  line=dict(color=color, width=2, dash="dash"),
-                                  xref=xref, yref=yref, row=row, col=c)
-
-                fig.update_xaxes(title_text=xlabel, row=row, col=c)
-                fig.update_yaxes(title_text="Frequency", row=row, col=c)
-
-            # --- box plot comparison ---
-            for metric in ["path_lengths", "mean_velocities", "episode_rewards", "episode_lengths"]:
-                fig.add_trace(go.Box(y=success_df[metric], name=f"{metric} (S)", marker_color="lightgreen", showlegend=False), row=2, col=2)
-                fig.add_trace(go.Box(y=failure_df[metric], name=f"{metric} (F)", marker_color="lightcoral", showlegend=False), row=2, col=2)
-
-            # --- pie: success vs failure ---
-            counts = df["success"].value_counts().sort_index()
-            labels = ["Failure" if i == 0 else "Success" for i in counts.index]
-            colors = ["lightcoral" if i == 0 else "lightgreen" for i in counts.index]
-            if len(counts) > 0:
-                fig.add_trace(go.Pie(labels=labels, values=counts.values, marker_colors=colors, showlegend=False), row=2, col=3)
-
-            # --- pie: failure reasons ---
-            n_collision = failure_df["collision"].sum()
-            reasons = {"Collision": n_collision, "Timeout/Other": len(failure_df) - n_collision}
-            reasons = {k: v for k, v in reasons.items() if v > 0}
-            if reasons:
-                fig.add_trace(go.Pie(labels=list(reasons.keys()), values=list(reasons.values()), showlegend=False), row=3, col=3)
-
-            fig.update_layout(height=1200, title_text="Success Analysis Dashboard", showlegend=True)
-
-            wandb.log(
-                {"eval_analysis/success_analysis_dashboard": wandb.Html(fig.to_html(include_plotlyjs="cdn"))},
-                step=self.num_timesteps,
-            )
+            wandb.log({"eval_analysis/episode_table": table}, step=self.num_timesteps)
 
         except Exception as e:
-            logger.exception(f"[EvalCallback] Error creating success analysis plots: {e}")
+            logger.exception(f"[EvalCallback] Error logging success analysis table: {e}")
 
     # ──────────────────────────────────────────────────────────────
     #  Trajectory plot  (MODIFIED — deterministic picks + reward width)
     # ──────────────────────────────────────────────────────────────
 
-    def _pick_trajectory_episodes(self) -> list[tuple[int, str]]:
+    def _pick_trajectory_episodes(self) -> list[tuple[int, str, str]]:
         """
-        Select up to 3 representative episodes for trajectory plotting:
-          1. Best successful   — highest reward among successful episodes
-          2. Best unsuccessful — highest reward among failed episodes
-          3. Worst unsuccessful — lowest reward among failed episodes
+        Select up to 4 representative episodes for trajectory plotting:
+          1. Successful   — highest reward among successful episodes
+          2. Successful   — lowest  reward among successful episodes
+          3. Unsuccessful — highest reward among failed episodes
+          4. Unsuccessful — lowest  reward among failed episodes
 
         Returns:
-            list of (episode_index, label) tuples
+            list of (episode_index, group_key, display_label) tuples
         """
         rewards = np.array(self.current_eval_cycle_data["episode_rewards"])
         successes = np.array(self.current_eval_cycle_data["success"])
 
-        picks: list[tuple[int, str]] = []
+        picks: list[tuple[int, str, str]] = []  # (ep_idx, group_key, display_label)
 
-        # --- best successful episode ---
+        # --- successful episodes ---
         success_mask = successes == 1
         if np.any(success_mask):
             success_indices = np.where(success_mask)[0]
-            best_success_idx = success_indices[np.argmax(rewards[success_indices])]
-            picks.append((int(best_success_idx), "Best Successful"))
+            best_idx = int(success_indices[np.argmax(rewards[success_indices])])
+            worst_idx = int(success_indices[np.argmin(rewards[success_indices])])
+            picks.append((best_idx,  "1_Success_Highest_Reward", "Success | Highest Reward"))
+            if worst_idx != best_idx:
+                picks.append((worst_idx, "2_Success_Lowest_Reward", "Success | Lowest Reward"))
 
-        # --- best unsuccessful episode ---
+        # --- unsuccessful episodes ---
         fail_mask = successes == 0
         if np.any(fail_mask):
             fail_indices = np.where(fail_mask)[0]
-            best_fail_idx = fail_indices[np.argmax(rewards[fail_indices])]
-            worst_fail_idx = fail_indices[np.argmin(rewards[fail_indices])]
-            picks.append((int(best_fail_idx), "Best Unsuccessful"))
-
-            # --- worst unsuccessful episode (skip if same as best) ---
-            if worst_fail_idx != best_fail_idx:
-                picks.append((int(worst_fail_idx), "Worst Unsuccessful"))
+            best_idx = int(fail_indices[np.argmax(rewards[fail_indices])])
+            worst_idx = int(fail_indices[np.argmin(rewards[fail_indices])])
+            picks.append((best_idx,  "3_Failure_Highest_Reward", "Failure | Highest Reward"))
+            if worst_idx != best_idx:
+                picks.append((worst_idx, "4_Failure_Lowest_Reward", "Failure | Lowest Reward"))
 
         return picks
 
@@ -422,7 +426,7 @@ class CustomEvalCallback(EvalCallback):
                 logger.warning("[EvalCallback] Could not pick any episodes for trajectory plotting.")
                 return
 
-            for plot_idx, (ep_idx, label) in enumerate(picked):
+            for ep_idx, group_key, label in picked:
                 positions = self.current_eval_cycle_data["positions_history"][ep_idx][:-1]
                 if len(positions) < 2:
                     continue
@@ -562,13 +566,15 @@ class CustomEvalCallback(EvalCallback):
 
                 # ── invisible trace for reward-width legend ──────────
                 # (add annotation instead, since width can't have a colorbar)
+                # placed at bottom-left to avoid overlapping the marker legend
                 fig.add_annotation(
                     text=(
                         f"Line width = step reward<br>"
                         f"(thin={r_min:.2f}, thick={r_max:.2f})"
                     ),
                     xref="paper", yref="paper",
-                    x=0.01, y=0.99,
+                    x=0.01, y=0.01,
+                    xanchor="left", yanchor="bottom",
                     showarrow=False,
                     font=dict(size=11),
                     bgcolor="rgba(255,255,255,0.8)",
@@ -578,17 +584,40 @@ class CustomEvalCallback(EvalCallback):
                 # ── markers ──────────────────────────────────────────
                 fig.add_trace(go.Scatter3d(
                     x=[positions[0, 0]], y=[positions[0, 1]], z=[positions[0, 2]],
-                    mode="markers", marker=dict(size=8, color="black"), name="Start",
+                    mode="markers+text", marker=dict(size=8, color="black"),
+                    text=["0"], textposition="top center",
+                    textfont=dict(size=10, color="black"), name="Start",
                 ))
                 fig.add_trace(go.Scatter3d(
                     x=[positions[-1, 0]], y=[positions[-1, 1]], z=[positions[-1, 2]],
-                    mode="markers", marker=dict(size=8, color="green"), name="End",
+                    mode="markers+text", marker=dict(size=8, color="green"),
+                    text=[str(len(positions) - 1)], textposition="top center",
+                    textfont=dict(size=10, color="green"), name="End",
                 ))
                 fig.add_trace(go.Scatter3d(
                     x=[target_position[0]], y=[target_position[1]], z=[target_position[2]],
                     mode="markers", marker=dict(size=10, color="gold", symbol="diamond"),
                     name="Target",
                 ))
+
+                # ── step count markers along trajectory ──────────────
+                n_pts = len(positions)
+                n_markers = min(10, n_pts)
+                if n_markers > 2:
+                    marker_indices = np.linspace(1, n_pts - 2, n_markers - 2, dtype=int)
+                    marker_indices = np.unique(marker_indices)  # deduplicate for short episodes
+                    fig.add_trace(go.Scatter3d(
+                        x=positions[marker_indices, 0],
+                        y=positions[marker_indices, 1],
+                        z=positions[marker_indices, 2],
+                        mode="markers+text",
+                        marker=dict(size=4, color="rgba(100,100,100,0.7)"),
+                        text=[str(i) for i in marker_indices],
+                        textposition="top center",
+                        textfont=dict(size=9, color="rgba(80,80,80,0.9)"),
+                        name="Step #",
+                        hovertemplate="Step %{text}<br>X: %{x:.2f}<br>Y: %{y:.2f}<br>Z: %{z:.2f}<extra></extra>",
+                    ))
 
                 # ── obstacles (AABB boxes) ───────────────────────────
                 obstacles = self.current_eval_cycle_data["obstacles_history"][ep_idx]
@@ -634,18 +663,133 @@ class CustomEvalCallback(EvalCallback):
                 )
 
                 wandb.log(
-                    {f"eval_trajectory/{label.replace(' ', '_')}": wandb.Html(fig.to_html(include_plotlyjs="cdn"))},
+                    {f"eval_episode/{group_key}/trajectory": wandb.Html(fig.to_html(include_plotlyjs="cdn"))},
                     step=self.num_timesteps,
                 )
 
         except Exception as e:
             logger.exception(f"[EvalCallback] Error creating trajectory plot: {e}")
 
+    def _log_reward_decomposition_plot(self):
+        """Create per-step reward decomposition line charts for picked trajectory episodes.
+
+        For each representative episode, plots all reward components over time steps
+        as separate lines, making it easy to see which components dominate and where
+        penalties fire during the trajectory.
+        """
+        try:
+            picked = self._pick_trajectory_episodes()
+            if not picked:
+                return
+
+            COMPONENT_COLORS = {
+                "reward_progress": "#2196F3",    # blue
+                "reward_obstacle": "#FF9800",    # orange
+                "reward_collision": "#F44336",   # red
+                "reward_target": "#4CAF50",      # green
+                "reward_step": "#9E9E9E",        # grey
+                # obstacle sub-components — distinct hues, not just orange variants
+                "reward_obs_approaching": "#E65100",           # deep orange
+                "reward_obs_weighting": "#8E24AA",             # purple
+                "reward_obs_mean_approach_penalty": "#BF360C", # brown-red
+                "reward_obs_proximity": "#00897B",             # teal
+            }
+            DASH_STYLES = {
+                "reward_obs_approaching": "dash",
+                "reward_obs_weighting": "dot",
+                "reward_obs_mean_approach_penalty": "dashdot",
+                "reward_obs_proximity": "longdash",
+            }
+
+            for ep_idx, group_key, label in picked:
+                step_rewards = self.current_eval_cycle_data["step_rewards_history"][ep_idx]
+                if len(step_rewards) < 2:
+                    continue
+
+                n_steps = len(step_rewards)
+                steps = np.arange(n_steps)
+
+                fig = make_subplots(
+                    rows=2, cols=1,
+                    row_heights=[0.55, 0.45],
+                    subplot_titles=("Per-step Reward Components", "Cumulative Reward Components"),
+                    vertical_spacing=0.10,
+                )
+
+                # ── per-step lines ──
+                for key in self.REWARD_COMPONENTS:
+                    history = self.current_eval_cycle_data[f"{key}_history"][ep_idx]
+                    if len(history) == 0:
+                        continue
+                    component_name = key.replace("reward_", "")
+                    color = COMPONENT_COLORS.get(key, "gray")
+
+                    dash = DASH_STYLES.get(key)
+                    fig.add_trace(go.Scatter(
+                        x=steps[:len(history)], y=history,
+                        mode="lines", name=component_name,
+                        line=dict(color=color, width=2, dash=dash),
+                    ), row=1, col=1)
+
+                    # ── cumulative lines ──
+                    fig.add_trace(go.Scatter(
+                        x=steps[:len(history)], y=np.cumsum(history),
+                        mode="lines", name=component_name,
+                        line=dict(color=color, width=2, dash=dash),
+                        showlegend=False,
+                    ), row=2, col=1)
+
+                # total reward as dashed overlay
+                fig.add_trace(go.Scatter(
+                    x=steps, y=step_rewards,
+                    mode="lines", name="total",
+                    line=dict(color="black", width=1, dash="dot"),
+                ), row=1, col=1)
+
+                fig.add_trace(go.Scatter(
+                    x=steps, y=np.cumsum(step_rewards),
+                    mode="lines", name="total",
+                    line=dict(color="black", width=1, dash="dot"),
+                    showlegend=False,
+                ), row=2, col=1)
+
+                reward = self.current_eval_cycle_data["episode_rewards"][ep_idx]
+                success = self.current_eval_cycle_data["success"][ep_idx]
+                collision = self.current_eval_cycle_data["collision"][ep_idx]
+
+                fig.update_layout(
+                    title=dict(
+                        text=(
+                            f"[{label}] Reward Decomposition "
+                            f"(Total: {reward:.2f}, Success: {success}, Collision: {collision})"
+                        ),
+                        y=0.98,
+                    ),
+                    height=900,
+                    width=900,
+                    margin=dict(t=120, r=40),
+                    legend=dict(orientation="h", y=1.10, x=0.5, xanchor="center"),
+                )
+                fig.update_xaxes(title_text="Step", row=2, col=1)
+                fig.update_yaxes(title_text="Reward", row=1, col=1)
+                fig.update_yaxes(title_text="Cumulative Reward", row=2, col=1)
+
+                wandb.log(
+                    {f"eval_episode/{group_key}/reward_decomposition": wandb.Html(fig.to_html(include_plotlyjs="cdn"))},
+                    step=self.num_timesteps,
+                )
+
+        except Exception as e:
+            logger.exception(f"[EvalCallback] Error creating reward decomposition plot: {e}")
+
     def _log_correlation_matrix(self):
         """Create and log correlation matrix plot to W&B"""
         try:
             df = pd.DataFrame(self.current_eval_cycle_data)
-            df = df.drop(["positions_history", "velocities_history", "target_position_history", "obstacles_history", "step_rewards_history"], axis=1)
+            history_cols = ["positions_history", "velocities_history", "target_position_history",
+                           "obstacles_history", "step_rewards_history"]
+            history_cols += [f"{k}_history" for k in self.REWARD_COMPONENTS]
+            df = df.drop(columns=[c for c in history_cols if c in df.columns])
 
             if df.empty:
                 logger.warning("[EvalCallback] Empty DataFrame for correlation matrix — skipping.")
@@ -688,6 +832,8 @@ class CustomEvalCallback(EvalCallback):
             "target_position": None,
             "start_time": self.num_timesteps,
             "obstacles": [],
+            # per-step reward components (accumulated, then summed at episode end)
+            **{k: [] for k in self.REWARD_COMPONENTS},
         }
 
     def _calculate_path_length(self, positions) -> float:

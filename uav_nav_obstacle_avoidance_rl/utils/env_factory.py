@@ -33,33 +33,34 @@ def make_flat_voyager(**env_kwargs):
     # extract wrapper-specific parameters (not accepted by VectorVoyagerEnv)
     perception_mode = env_kwargs.pop("perception_mode")
     lidar_kwargs = env_kwargs.pop("lidar")
-    reward_config = env_kwargs.pop("reward")
-    num_targets = env_kwargs.get("num_targets")
+    
+    reward_cfg = env_kwargs.pop("reward")
+    reward_type = reward_cfg["type"]
+    reward_kwargs = reward_cfg[reward_type]  # select the active sub-dict
 
-    # reward_type = reward_config["type"]
-    # reward_kwargs = reward_config[reward_type]  # select the active sub-dict
-
-    # create base environment
+    # 1. base environment
     env = VectorVoyagerEnv(**env_kwargs)
 
+    # 2. lidar wrapper 
     if perception_mode == "lidar":
         env = LidarObservationWrapper(env, **lidar_kwargs)
 
-        # # custom reward works only with ray cast (lidar) measurements
-        # if reward_type == "pyflyt":
-        #     env = PyFlytRewardWrapper(env, **reward_kwargs)
-        # elif reward_type == "custom":
-        #     env = CustomRewardWrapper(env, **reward_kwargs)
+    # 3.reward wrappers
+    if reward_type == "pyflyt":
+        env = PyFlytRewardWrapper(env, **reward_kwargs)
+    elif reward_type == "custom":
+        # works only with ray cast (lidar) measurements !!!
+        env = CustomRewardWrapper(env, **reward_kwargs)
 
-    # # normalize actions and observations (works with and without lidar)
+    # 4. normalization wrappers - normalize actions and observations (works with and without lidar)
     # env = RescaleAction(env, min_action=-1.0, max_action=1.0)
     # env = NormalizeObservationWrapper(env)
 
-    # flatten env
+    # 5. flatten env
     if perception_mode == "lidar":
-        env = LidarFlattenWrapper(env, context_length=num_targets)
+        env = LidarFlattenWrapper(env, context_length=env_kwargs.get("num_targets"))
     else:
-        env = FlattenVectorVoyagerEnv(env, context_length=num_targets)
+        env = FlattenVectorVoyagerEnv(env, context_length=env_kwargs.get("num_targets"))
 
     return env
 

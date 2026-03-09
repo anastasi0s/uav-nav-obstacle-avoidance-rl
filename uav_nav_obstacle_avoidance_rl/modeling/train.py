@@ -1,6 +1,6 @@
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-import torch
 
 import typer
 import wandb
@@ -21,7 +21,17 @@ logger = config.logger
 
 MONITOR_INFO_KEYWORDS = ("collision", "env_complete", "num_targets_reached", "num_obstacles")
 
-a_seed = 319
+
+@dataclass
+class TrainParams:
+    timesteps: int = 500_000
+    eval_freq: int = 100_000
+    n_envs: int = 2
+    n_eval_episodes: int = 30
+    log_interval: int = 10
+    seed: int = 319
+    verbose: int = 0
+
 
 def _load_config(path: Path = config.EXP_CONFIG_PATH) -> dict:
     """Load experiment config from YAML."""
@@ -31,14 +41,8 @@ def _load_config(path: Path = config.EXP_CONFIG_PATH) -> dict:
 
 def _train(
     run: wandb.sdk.wandb_run.Run,
-    timesteps: int,
-    eval_freq: int,
-    n_envs: int,
-    n_eval_episodes: int,
-    log_interval: int,
-    seed: int,
+    params: TrainParams,
     exp_analysis: bool,
-    verbose: int,
 ):
     """training logic used by both run_train and sweep agents"""
     env_config = dict(run.config["env"])
@@ -49,33 +53,32 @@ def _train(
     # ----- create environments --------
     vec_env = make_vec_env(
         env_factory.make_flat_voyager,
-        n_envs=n_envs,
+        n_envs=params.n_envs,
         env_kwargs={**env_config, "visual_obstacles": False},
         monitor_kwargs=monitor_info,
-
     )
 
     base_env_test.analyse_env(vec_env)
-    
+
     # create separate evaluation env
     vec_env_eval = make_vec_env(
         env_factory.make_flat_voyager,
-        n_envs=n_envs,
+        n_envs=params.n_envs,
         env_kwargs=env_config,
         monitor_kwargs=monitor_info,
     )
 
     # ----- callbacks --------
     callbacks = []
-    wandb_callback = WandbCallback(verbose=verbose)
+    wandb_callback = WandbCallback(verbose=params.verbose)
 
     train_callback = TrainMetricsCallback(
         run_path=run.dir,
-        verbose=verbose,
+        verbose=params.verbose,
     )
 
-    adj_eval_freq = eval_freq // n_envs
-    adj_n_eval_episodes = n_eval_episodes // n_envs
+    adj_eval_freq = params.eval_freq // params.n_envs
+    adj_n_eval_episodes = params.n_eval_episodes // params.n_envs
     eval_callback = CustomEvalCallback(
         vec_env_eval,
         best_model_save_path=f"{run.dir}/models",
@@ -84,9 +87,9 @@ def _train(
         n_eval_episodes=adj_n_eval_episodes,
         deterministic=True,
         render=False,
-        verbose=verbose,
+        verbose=params.verbose,
         exp_analysis=exp_analysis,
-        seed=seed,
+        seed=params.seed,
     )
 
     callbacks.append(wandb_callback)
@@ -94,45 +97,44 @@ def _train(
     callbacks.append(eval_callback)
 
     if curriculum_config.pop('enabled', False):
-        curriculum_callback = CurriculumCallback(**curriculum_config, verbose=verbose, eval_env=vec_env_eval)
+        curriculum_callback = CurriculumCallback(**curriculum_config, verbose=params.verbose, eval_env=vec_env_eval)
         callbacks.append(curriculum_callback)
 
     model = PPO(
         "MlpPolicy",
         vec_env,
         **ppo_config,
-        verbose=verbose,
+        verbose=params.verbose,
         tensorboard_log=f"{run.dir}/tensorboard",
-        seed=seed,
+        seed=params.seed,
         device="cpu",
     )
 
     model.learn(
-        total_timesteps=timesteps,
+        total_timesteps=params.timesteps,
         callback=callbacks,
         progress_bar=True,
-        log_interval=log_interval,
+        log_interval=params.log_interval,
     )
 
 
 @app.command()
 def run_train(
     exp_name: str = "exp",
-    timesteps: int = 500_000,
-    eval_freq: int = 100_000,
-    n_envs: int = 2,
-    n_eval_episodes: int = 30,
-    log_interval: int = 10,
-    seed: int = a_seed,
+    timesteps: int = TrainParams.timesteps,
+    eval_freq: int = TrainParams.eval_freq,
+    n_envs: int = TrainParams.n_envs,
+    n_eval_episodes: int = TrainParams.n_eval_episodes,
+    log_interval: int = TrainParams.log_interval,
+    seed: int = TrainParams.seed,
+    verbose: int = TrainParams.verbose,
     exp_analysis: bool = True,
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     wandb_tags: list[str] | None = None,
-    verbose: int = 0,
-    ):
+):
     """
     training script with W&B integration for experiment tracking
     """
-
     exp_config = _load_config()
     with wandb.init(
         project=wandb_project,
@@ -141,19 +143,20 @@ def run_train(
         config=exp_config,
         dir=config.REPORTS_DIR.as_posix(),
         monitor_gym=True,
-        settings=wandb.Settings(x_disable_stats=True)
-        ) as run:
-
+        settings=wandb.Settings(x_disable_stats=True),
+    ) as run:
         _train(
             run=run,
-            timesteps=timesteps,
-            eval_freq=eval_freq,
-            n_envs=n_envs,
-            n_eval_episodes=n_eval_episodes,
-            log_interval=log_interval,
-            seed=seed,
+            params=TrainParams(
+                timesteps=timesteps,
+                eval_freq=eval_freq,
+                n_envs=n_envs,
+                n_eval_episodes=n_eval_episodes,
+                log_interval=log_interval,
+                seed=seed,
+                verbose=verbose,
+            ),
             exp_analysis=exp_analysis,
-            verbose=verbose,
         )
 
 
@@ -161,13 +164,13 @@ def run_train(
 def sweep(
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     count: int = 20,
-    timesteps: int = 500_000,
-    eval_freq: int = 100_000,
-    n_envs: int = 2,
-    n_eval_episodes: int = 30,
-    log_interval: int = 10,
-    seed: int = a_seed,
-    verbose: int = 0,
+    timesteps: int = TrainParams.timesteps,
+    eval_freq: int = TrainParams.eval_freq,
+    n_envs: int = TrainParams.n_envs,
+    n_eval_episodes: int = TrainParams.n_eval_episodes,
+    log_interval: int = TrainParams.log_interval,
+    seed: int = TrainParams.seed,
+    verbose: int = TrainParams.verbose,
     sweep_id: Optional[str] = None,
 ):
     """
@@ -186,14 +189,16 @@ def sweep(
         ) as run:
             _train(
                 run=run,
-                timesteps=timesteps,
-                eval_freq=eval_freq,
-                n_envs=n_envs,
-                n_eval_episodes=n_eval_episodes,
-                log_interval=log_interval,
-                seed=seed,
+                params=TrainParams(
+                    timesteps=timesteps,
+                    eval_freq=eval_freq,
+                    n_envs=n_envs,
+                    n_eval_episodes=n_eval_episodes,
+                    log_interval=log_interval,
+                    seed=seed,
+                    verbose=verbose,
+                ),
                 exp_analysis=False,
-                verbose=verbose,
             )
 
     if sweep_id is None:
@@ -208,12 +213,12 @@ def sweep(
 @app.command()
 def seed_sweep(
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
-    timesteps: int = 500_000,
-    eval_freq: int = 100_000,
-    n_envs: int = 2,
-    n_eval_episodes: int = 30,
-    log_interval: int = 10,
-    verbose: int = 0,
+    timesteps: int = TrainParams.timesteps,
+    eval_freq: int = TrainParams.eval_freq,
+    n_envs: int = TrainParams.n_envs,
+    n_eval_episodes: int = TrainParams.n_eval_episodes,
+    log_interval: int = TrainParams.log_interval,
+    verbose: int = TrainParams.verbose,
     sweep_id: Optional[str] = None,
 ):
     """
@@ -230,17 +235,18 @@ def seed_sweep(
             dir=config.REPORTS_DIR.as_posix(),
             settings=wandb.Settings(x_disable_stats=True),
         ) as run:
-            seed = run.config["seed"]
             _train(
                 run=run,
-                timesteps=timesteps,
-                eval_freq=eval_freq,
-                n_envs=n_envs,
-                n_eval_episodes=n_eval_episodes,
-                log_interval=log_interval,
-                seed=seed,
+                params=TrainParams(
+                    timesteps=timesteps,
+                    eval_freq=eval_freq,
+                    n_envs=n_envs,
+                    n_eval_episodes=n_eval_episodes,
+                    log_interval=log_interval,
+                    seed=run.config["seed"],
+                    verbose=verbose,
+                ),
                 exp_analysis=False,
-                verbose=verbose,
             )
 
     if sweep_id is None:

@@ -37,12 +37,11 @@ def make_flat_voyager(**env_kwargs):
     # create base environment
     env = VectorVoyagerEnv(**env_kwargs)
 
-    # normalize actions
-    env = RescaleAction(env, min_action=-1.0, max_action=1.0)
-
     if perception_mode == "lidar":
         env = LidarObservationWrapper(env, **lidar_kwargs)
 
+    # normalize actions
+    env = RescaleAction(env, min_action=-1.0, max_action=1.0)
     # normalize observations (works with and without lidar)
     env = NormalizeObservationWrapper(env)
 

@@ -38,7 +38,7 @@ env:
     fov_horizontal: 360.0           # degrees  # XXX adjust angle calculations in lidar wrapper if < 360.0
     fov_vertical: 30.0              # degrees
     ray_start_offset: 0.15          # meters from drone center
-    normalize_distances: true
+    normalize_distances: false
     add_to_obs: "separate"          # append | separate | replace
 
 # ── Curriculum Learning ──────────────────────────────────────

@@ -24,12 +24,12 @@ MONITOR_INFO_KEYWORDS = ("collision", "env_complete", "num_targets_reached", "nu
 
 @dataclass
 class TrainParams:
-    timesteps: int = 500_000
-    eval_freq: int = 100_000
+    timesteps: int = 2_000_000
+    eval_freq: int = 200_000
     n_envs: int = 2
-    n_eval_episodes: int = 30
-    log_interval: int = 10
-    seed: int = 319
+    n_eval_episodes: int = 20
+    log_interval: int = 1
+    seed: int = 9
     verbose: int = 0
 
 
@@ -213,6 +213,7 @@ def sweep(
 
 @app.command()
 def seed_sweep(
+    exp_name: str = "exp",
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     timesteps: int = TrainParams.timesteps,
     eval_freq: int = TrainParams.eval_freq,
@@ -237,6 +238,7 @@ def seed_sweep(
             dir=config.REPORTS_DIR.as_posix(),
             settings=wandb.Settings(x_disable_stats=True),
         ) as run:
+            run.name = f"{exp_name}-seed-{run.config['seed']}"
             _train(
                 run=run,
                 params=TrainParams(

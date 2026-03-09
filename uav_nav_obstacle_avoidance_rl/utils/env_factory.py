@@ -13,7 +13,7 @@ from uav_nav_obstacle_avoidance_rl.environment.lidar_wrapper import (
 from uav_nav_obstacle_avoidance_rl.environment.normalize_obs_wrapper import (
     NormalizeObservationWrapper,
 )
-from uav_nav_obstacle_avoidance_rl.environment.reward_wrapper import PyFlytRewardWrapper, CustomRewardWrapper
+# from uav_nav_obstacle_avoidance_rl.environment.reward_wrapper import PyFlytRewardWrapper, CustomRewardWrapper
 from uav_nav_obstacle_avoidance_rl.environment.vector_voyager_env import (
     VectorVoyagerEnv,
 )

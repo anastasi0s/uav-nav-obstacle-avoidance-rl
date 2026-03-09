@@ -71,7 +71,7 @@ env:
 # When curriculum is disabled, env defaults above are used directly.
 # When enabled, each stage overrides env defaults for difficulty parameters.
 curriculum:
-  enabled: false
+  enabled: true
   advance_threshold: 0.8
   advance_patience: 5
   regress_threshold: 0.4
@@ -92,9 +92,9 @@ curriculum:
       desc: "A few obstacles along the flight path"
       num_obstacles_range: [1, 3]
       obstacle_shapes: ["cylinder"]
-      obstacle_size_range: [0.3, 0.5]
+      obstacle_size_range: [0.3, 0.8]
       obstacle_placement: "along_path"
-      obstacle_distance_range: null
+      obstacle_distance_range: [2.0, 5.0]
       num_targets: 1
       target_distance_range: [3.0, 6.0]
 
@@ -104,14 +104,14 @@ curriculum:
       obstacle_shapes: ["cylinder", "box"]
       obstacle_size_range: [0.2, 0.7]
       obstacle_placement: "around_target"
-      obstacle_distance_range: [2.0, 5.0]
+      obstacle_distance_range: [1.0, 8.0]
       num_targets: 1
       target_distance_range: [3.0, 8.0]
 
     - stage: 3
       desc: "Dense, mixed shapes and sizes"
       num_obstacles_range: [6, 10]
-      obstacle_shapes: ["cylinder", "box", "sphere"]
+      obstacle_shapes: ["cylinder", "box"]
       obstacle_size_range: [0.2, 0.9]
       obstacle_placement: "along_path"
       obstacle_distance_range: null
@@ -120,8 +120,8 @@ curriculum:
 
     - stage: 4
       desc: "Dense field, longer distances"
-      num_obstacles_range: [8, 12]
-      obstacle_shapes: ["cylinder", "box", "sphere"]
+      num_obstacles_range: [10, 15]
+      obstacle_shapes: ["cylinder", "box"]
       obstacle_size_range: [0.2, 1.0]
       obstacle_placement: "random"
       obstacle_distance_range: null
@@ -130,7 +130,7 @@ curriculum:
 
     - stage: 5
       desc: "Full difficulty — any distance, dense obstacles"
-      num_obstacles_range: [10, 15]
+      num_obstacles_range: [20, 40]
       obstacle_shapes: ["cylinder", "box", "sphere"]
       obstacle_size_range: [0.2, 1.0]
       obstacle_placement: "random"

@@ -67,9 +67,8 @@ class CurriculumCallback(BaseCallback):
         self.window_size = window_size
         self.success_window: deque = deque(maxlen=window_size)  # deque automatically removes old entries/episodes from the window
 
-        # patience counters for rollout-end evaluations that meet the threshold. reset to 0 when the condition is not met
-        self._advance_streak = 0
-        self._regress_streak = 0
+        # patience counter: positive = consecutive advance evals, negative = consecutive regress evals, reset to 0 otherwise
+        self._streak = 0
     
     def _on_step(self):
         """collect episode outcomes"""
@@ -102,41 +101,34 @@ class CurriculumCallback(BaseCallback):
         # log wandb
         self._log_metrics(success_rate)
 
-        # try advance
+        # update streak: positive for advance, negative for regress, reset otherwise
         if success_rate >= self.advance_threshold:
-            self._advance_streak += 1
-            self._regress_streak = 0
-            if self._advance_streak >= self.advance_patience:
-                # advance if patience is met
-                if self.current_stage_idx >= self.num_stages - 1:
-                    # reached max stage
-                    logger.debug("[Curriculum] Already at final stage — cannot advance.")
-                    return
-                old_idx = self.current_stage_idx
-                self.current_stage_idx += 1
-                self._transition_stage(old_idx=old_idx, new_idx=self.current_stage_idx, force_reset=True)
-        # try regress
+            self._streak = max(self._streak, 0) + 1
         elif success_rate <= self.regress_threshold:
-            self._regress_streak += 1
-            self._advance_streak = 0
-            if self._regress_streak >= self.regress_patience:
-                # regress if patience is met
-                if self.current_stage_idx <= 0:
-                    # reached min stage
-                    logger.debug("[Curriculum] Already at lowest stage — cannot regress.")
-                    return
-                old_idx = self.current_stage_idx
-                self.current_stage_idx -= 1
-                self._transition_stage(old_idx=old_idx, new_idx=self.current_stage_idx, force_reset=True)
-        # in between thresholds - reset both
+            self._streak = min(self._streak, 0) - 1
         else:
-            self._advance_streak = 0
-            self._regress_streak = 0
+            self._streak = 0
+
+        # try advance
+        if self._streak >= self.advance_patience:
+            if self.current_stage_idx >= self.num_stages - 1:
+                logger.debug("[Curriculum] Already at final stage — cannot advance.")
+                return
+            old_idx = self.current_stage_idx
+            self.current_stage_idx += 1
+            self._transition_stage(old_idx=old_idx, new_idx=self.current_stage_idx, force_reset=True)
+        # try regress
+        elif self._streak <= -self.regress_patience:
+            if self.current_stage_idx <= 0:
+                logger.debug("[Curriculum] Already at lowest stage — cannot regress.")
+                return
+            old_idx = self.current_stage_idx
+            self.current_stage_idx -= 1
+            self._transition_stage(old_idx=old_idx, new_idx=self.current_stage_idx, force_reset=True)
     
     def _transition_stage(self, new_idx: int, old_idx: int=0, force_reset: bool=False):
         """ push new stage to all sub envs via VecEnv"""
-        self._advance_streak = 0  # prevent immediate retriggering of stage change
-        self._regress_streak = 0
+        self._streak = 0  # prevent immediate retriggering of stage change
         self.success_window.clear()  # episodes from old difficulty are meaningless for evaluations in new stage
         
         # apply stage to all train envs
@@ -163,12 +155,11 @@ class CurriculumCallback(BaseCallback):
             {
                 "curriculum/stage": self.current_stage_idx,
                 "curriculum/success_rate": success_rate,
-                "curriculum/advance_streak": self._advance_streak,
-                "curriculum/regress_streak": self._regress_streak,
+                "curriculum/streak": self._streak,
             },
             step=self.num_timesteps,
         )
         logger.debug(
             f"[Curriculum] stage={self.current_stage_idx} success_rate={success_rate:.3f} "
-            f"advance_streak={self._advance_streak} regress_streak={self._regress_streak}"
+            f"streak={self._streak}"
         )

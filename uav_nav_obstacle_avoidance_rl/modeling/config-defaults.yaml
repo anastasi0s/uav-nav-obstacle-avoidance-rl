@@ -70,7 +70,7 @@ env:
 # When curriculum is disabled, env defaults above are used directly.
 # When enabled, each stage overrides env defaults for difficulty parameters.
 curriculum:
-  enabled: false
+  enabled: true
   advance_threshold: 0.8
   advance_patience: 5
   regress_threshold: 0.4

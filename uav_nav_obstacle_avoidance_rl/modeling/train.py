@@ -239,12 +239,12 @@ def seed_sweep(
     def _seed_sweep_train():
         with wandb.init(
             config=exp_config,
-            group=sweep_id,
+            group=sweep_name,
             dir=config.REPORTS_DIR.as_posix(),
             save_code=True,
             settings=wandb.Settings(x_disable_stats=True),
         ) as run:
-            run.name = f"{exp_name}-seed-{run.config['seed']}"
+            run.name = f"{exp_name}-{run.config['seed']}"
             _train(
                 run=run,
                 params=TrainParams(
@@ -259,8 +259,10 @@ def seed_sweep(
                 exp_analysis=False,
             )
 
+    sweep_name = exp_name
     if sweep_id is None:
         sweep_config = _load_config(config.SEED_SWEEP_CONFIG_PATH)
+        sweep_config["name"] = sweep_name
         sweep_id = wandb.sweep(sweep=sweep_config, project=wandb_project)
         logger.info(f"Created seed sweep with ID: {sweep_id}")
 

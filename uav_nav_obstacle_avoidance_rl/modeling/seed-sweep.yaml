@@ -1,5 +1,5 @@
 method: grid
-name: seed-sweep-base
+name: exp-seed
 
 parameters:
   seed:

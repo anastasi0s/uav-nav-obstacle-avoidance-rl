@@ -9,7 +9,6 @@ env:
   # Waypoints
   num_targets: 1                    # [curriculum]
   target_distance_range: null       # [curriculum] [min_r, max_r] or None for unconstrained
-  sparse_reward: true
   use_yaw_targets: false            # toggles whether the agent must also align its yaw (heading) to a per‐waypoint target before that waypoint is considered “reached,” and whether yaw error is included in the observation.
   goal_reach_distance: 0.2          # distance in meters within which the target is considered reached
   goal_reach_angle: 0.1             # radians
@@ -51,7 +50,7 @@ env:
       step_penalty: 0.1            # alive penalty P
       collision_penalty: 100.0     # terminal penalty C on collision
       target_reached_bonus: 100.0  # discrete bonus B for reaching a waypoint
-      sparse_reward: false         # skip dense shaping (progress + distance) when true
+      sparse_reward: true         # skip dense shaping (progress + distance) when true
 
     # ── RewardWrapper (lidar-aware, obstacle avoidance) ──
     # r_t = w_prog * r_prog + w_obs * r_obs + r_collision + r_target + r_step

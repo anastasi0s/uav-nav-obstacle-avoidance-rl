@@ -20,7 +20,7 @@ class CustomEvalCallback(EvalCallback):
 
     # reward component keys emitted by RewardWrapper
     REWARD_COMPONENTS = [
-        "reward_total", "reward_progress", "reward_obstacle", "reward_collision", "reward_target", "reward_step",
+        "reward_total", "reward_progress", "reward_obstacle", "reward_collision", "reward_target", "reward_step", "reward_distance",
         # obstacle sub-components
         "reward_obs_approaching", "reward_obs_weighting", "reward_obs_mean_approach_penalty", "reward_obs_proximity",
     ]

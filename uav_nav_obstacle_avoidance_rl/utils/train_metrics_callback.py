@@ -45,13 +45,6 @@ class TrainMetricsCallback(BaseCallback):
         self.model_save_freq = model_save_freq
         self.run_path = run_path
 
-        # storage for whole train-run metrics
-        self.train_run_metrics = {
-            "success": [],
-            "collision": [],
-            "targets_reached": [],
-        }
-
         # current episode tracking
         self.current_episode_data = {}
 
@@ -65,6 +58,9 @@ class TrainMetricsCallback(BaseCallback):
         for i in range(n_envs):
             self._reset_current_episode(i)
 
+    # reward component keys emitted by RewardWrapper
+    REWARD_COMPONENTS = ["reward_progress", "reward_obstacle", "reward_collision", "reward_target", "reward_step", "reward_total"]
+
     def _reset_current_episode(self, env_idx: int):
         """reset tracking for the next episode"""
         self.current_episode_data[env_idx] = {
@@ -73,6 +69,8 @@ class TrainMetricsCallback(BaseCallback):
             "start_position": None,
             "target_position": None,
             "start_time": self.num_timesteps,
+            # per-step reward components (accumulated, then summed at episode end)
+            **{k: [] for k in self.REWARD_COMPONENTS},
         }
 
     def _on_step(self) -> bool:
@@ -98,6 +96,12 @@ class TrainMetricsCallback(BaseCallback):
 
                 self.current_episode_data[env_idx]["positions"].append(lin_pos.copy())
                 self.current_episode_data[env_idx]["velocities"].append(lin_vel.copy())
+
+                # accumulate per-step reward components from RewardWrapper
+                step_info = info[env_idx]
+                for key in self.REWARD_COMPONENTS:
+                    if key in step_info:
+                        self.current_episode_data[env_idx][key].append(float(step_info[key]))
 
                 # set start position if first step
                 if self.current_episode_data[env_idx]["start_position"] is None:
@@ -131,7 +135,6 @@ class TrainMetricsCallback(BaseCallback):
             collision = info["collision"]
             env_complete = info["env_complete"]  # when all targets reached
             targets_reached = info["num_targets_reached"]
-            episode_reward = info["episode"]["r"]
             episode_length = info["episode"]["l"]
 
             # check for success = all targets reached, without collisions
@@ -156,29 +159,29 @@ class TrainMetricsCallback(BaseCallback):
                 # unsuccessful episodes (for consistent array length in self.episode_history)
                 path_efficiency = 0.0
 
-            # store in run-level episode history
-            self.train_run_metrics["success"].append(int(success))
-            self.train_run_metrics["collision"].append(int(collision))
-            self.train_run_metrics["targets_reached"].append(targets_reached)
-
-            # calculate performance ratios using run-level storage
-            success_rate = np.mean(self.train_run_metrics["success"][-20:])
-            collision_rate = np.mean(self.train_run_metrics["collision"][-20:])
-            targets_reached_rolling = np.mean(self.train_run_metrics["targets_reached"][-20:])
+            # compute reward component episode sums (and means for per-step components only)
+            ep = self.current_episode_data[env_idx]
+            reward_component_metrics = {}
+            for key in self.REWARD_COMPONENTS:
+                values = ep[key]
+                if values:
+                    component_name = key.replace("reward_", "")  # e.g. "progress"
+                    reward_component_metrics[f"train_cum_reward/{component_name}"] = float(np.sum(values))
 
             # log metrics to W&B
             episode_metrics = {
-                # performance ratios
-                "train_uav/success_rate_rolling_20ep": success_rate,
-                "train_uav/collision_rate_rolling_20ep": collision_rate,
-                "train_uav/targets_reached_rolling_20ep": targets_reached_rolling,
-                # movement metrics
-                "train_uav/mean_velocity": mean_velocity,
-                "train_uav/path_length": path_length,
-                "train_uav/path_efficiency": path_efficiency,
-                # episode basics
-                "train_uav/episode_reward": episode_reward,
-                "train_uav/episode_length": episode_length,
+                # per-episode outcomes (use W&B smoothing for rolling averages)
+                "train/success": int(success),
+                "train/collision": int(collision),
+                "train/targets_reached": targets_reached,
+                # movement metrics (per episode)
+                "train/mean_velocity": mean_velocity,
+                "train/path_length": path_length,
+                "train/path_efficiency": path_efficiency,
+                # episode basics (per episode)
+                "train/length": episode_length,
+                # reward decomposition
+                **reward_component_metrics,
             }
 
             wandb.log(episode_metrics, step=self.num_timesteps)
@@ -194,9 +197,7 @@ class TrainMetricsCallback(BaseCallback):
         if len(positions) < 2:
             return 0.0
         positions = np.array(positions)
-        distances = np.linalg.norm(
-            np.diff(positions, axis=0), axis=1
-        )  # calc. difference between postions -> calc. norm (distance) of difference -> sum all distances between positions -> complete length of traveled path
+        distances = np.linalg.norm(np.diff(positions, axis=0), axis=1)  # calc. difference between postions -> calc. norm (distance) of difference -> sum all distances between positions -> complete length of traveled path
         return float(np.sum(distances))
 
     def _calculate_average_velocity(self, velocities) -> float:
@@ -211,9 +212,7 @@ class TrainMetricsCallback(BaseCallback):
         self, start_position, target_position, path_length: float
     ) -> float:
         # direct distance to target
-        direct_distance = np.linalg.norm(
-            target_position - start_position
-        )  # XXX adjust for multiple waypoint targets
+        direct_distance = np.linalg.norm(target_position - start_position)  # XXX adjust for multiple waypoint targets
         if direct_distance == 0:
             return 0.0
 

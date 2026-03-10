@@ -1,30 +1,29 @@
 # ── Environment ──────────────────────────────────────────────
 env:
-  start_pos: [0.0, 0.0, 1.0]              # UAV start position
-  # Boundary
+  # Space
+  start_pos: [0.0, 0.0, 1.0]        # UAV start position
   grid_sizes: [50.0, 50.0, 5.0]     # [x, y, z] in meters — occupancy grid uses (x, y), z is for wall/obstacle height
   cell_size: 1.0                    # 2D occupancy grid cell size (meters)
   min_height: 0.01                  # min flight height; collision below this
 
   # Waypoints
-  num_targets: 1                    # (controlled by curriculum learning)
-  target_distance_range: null       # [min_r, max_r] or None for unconstrained; set by curriculum
-  sparse_reward: false
+  num_targets: 1                    # [curriculum]
+  target_distance_range: null       # [curriculum] [min_r, max_r] or None for unconstrained
   use_yaw_targets: false            # toggles whether the agent must also align its yaw (heading) to a per‐waypoint target before that waypoint is considered “reached,” and whether yaw error is included in the observation.
   goal_reach_distance: 0.2          # distance in meters within which the target is considered reached
   goal_reach_angle: 0.1             # radians
 
   # Obstacles
-  num_obstacles_range: [0, 3]       # (controlled by curriculum learning)
-  obstacle_shapes: ['cylinder']     # ['cylinder', 'box', 'sphere']
-  obstacle_size_range: [0.5, 0.5]   # [min, max] fraction of cell_size
+  num_obstacles_range: null         # [curriculum] [int, int] | null 
+  obstacle_shapes: ['cylinder']     # [curriculum] ['cylinder', 'box', 'sphere'] | null
+  obstacle_size_range: [0.5, 0.5]   # [curriculum] [min, max] | null fraction of cell_size
   visual_obstacles: false           # render meshes (for eval only)
 
   # Simulation --- with agent_hz=30 and 80s/episode, an episode is up to ~2400 steps
   max_duration_seconds: 80.0        # max simulation time of the env
   flight_mode: 5                    # PyFlyt velocity control (u, v, vr, vz)
   angle_representation: "quaternion" # "euler" or "quaternion"
-  agent_hz: 30                      # looprate of the agent to environment interaction
+  agent_hz: 30                      # looprate of the agent to environment interaction 30Hz agent / 120Hz env -> 1(action agent) / 4(steps env) ratio
   render_mode: null                 # "human" or "rgb_array" or None
   render_resolution: [480, 480]
 
@@ -38,8 +37,34 @@ env:
     fov_horizontal: 360.0           # degrees  # XXX adjust angle calculations in lidar wrapper if < 360.0
     fov_vertical: 30.0              # degrees
     ray_start_offset: 0.15          # meters from drone center
-    normalize_distances: true
+    normalize_distances: false
     add_to_obs: "separate"          # append | separate | replace
+
+  # Reward Signal — select wrapper via `type`
+  reward:
+    type: "pyflyt"              # "pyflyt" | "custom"
+
+    # ── PyFlytRewardWrapper (baseline, no obstacle awareness) ──
+    # r_t = -P + max(3*progress, 0) + 0.1/dist + r_collision + r_target
+    pyflyt:
+      step_penalty: 0.1            # alive penalty P
+      collision_penalty: 100.0     # terminal penalty C on collision
+      target_reached_bonus: 100.0  # discrete bonus B for reaching a waypoint
+      sparse_reward: false         # skip dense shaping (progress + distance) when true
+
+    # ── RewardWrapper (lidar-aware, obstacle avoidance) ──
+    # r_t = w_prog * r_prog + w_obs * r_obs + r_collision + r_target + r_step
+    custom:
+      d_attention: 5.0          # radius where obstacles start mattering
+      d_danger: 1.0             # radius for steep proximity penalty
+      d_floor: 0.1              # minimum distance for log functions
+      obs_lambda: 1.0           # weight for min-proximity term
+      w_prog: 1.0               # weight for progress reward
+      w_obs: 0.01               # weight for obstacle avoidance reward
+      collision_penalty: 10.0   # terminal penalty C
+      target_reached_bonus: 10.0  # discrete bonus B
+      step_penalty: 0.01         # time cost P
+
 
 # ── Curriculum Learning ──────────────────────────────────────
 # When curriculum is disabled, env defaults above are used directly.
@@ -66,9 +91,9 @@ curriculum:
       desc: "A few obstacles along the flight path"
       num_obstacles_range: [1, 3]
       obstacle_shapes: ["cylinder"]
-      obstacle_size_range: [0.3, 0.5]
+      obstacle_size_range: [0.3, 0.8]
       obstacle_placement: "along_path"
-      obstacle_distance_range: null
+      obstacle_distance_range: [2.0, 5.0]
       num_targets: 1
       target_distance_range: [3.0, 6.0]
 
@@ -78,14 +103,14 @@ curriculum:
       obstacle_shapes: ["cylinder", "box"]
       obstacle_size_range: [0.2, 0.7]
       obstacle_placement: "around_target"
-      obstacle_distance_range: [2.0, 5.0]
+      obstacle_distance_range: [1.0, 8.0]
       num_targets: 1
       target_distance_range: [3.0, 8.0]
 
     - stage: 3
       desc: "Dense, mixed shapes and sizes"
       num_obstacles_range: [6, 10]
-      obstacle_shapes: ["cylinder", "box", "sphere"]
+      obstacle_shapes: ["cylinder", "box"]
       obstacle_size_range: [0.2, 0.9]
       obstacle_placement: "along_path"
       obstacle_distance_range: null
@@ -94,8 +119,8 @@ curriculum:
 
     - stage: 4
       desc: "Dense field, longer distances"
-      num_obstacles_range: [8, 12]
-      obstacle_shapes: ["cylinder", "box", "sphere"]
+      num_obstacles_range: [10, 15]
+      obstacle_shapes: ["cylinder", "box"]
       obstacle_size_range: [0.2, 1.0]
       obstacle_placement: "random"
       obstacle_distance_range: null
@@ -104,7 +129,7 @@ curriculum:
 
     - stage: 5
       desc: "Full difficulty — any distance, dense obstacles"
-      num_obstacles_range: [10, 15]
+      num_obstacles_range: [20, 40]
       obstacle_shapes: ["cylinder", "box", "sphere"]
       obstacle_size_range: [0.2, 1.0]
       obstacle_placement: "random"

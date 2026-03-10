@@ -39,9 +39,11 @@ class LidarObservationWrapper(gym.ObservationWrapper):
             fov_horizontal: float,
             fov_vertical: float,
             ray_start_offset: float,
+            normalize_distances: bool,
             add_to_obs: Literal["append", "separate", "replace"] = "separate",
     ):
         super().__init__(env)
+        self._base_env = self.unwrapped  # VectorVoyagerEnv; use _base_env.env to access the Aviary
 
         # LIDAR config.
         self.num_rays_horizontal = num_rays_horizontal
@@ -121,8 +123,8 @@ class LidarObservationWrapper(gym.ObservationWrapper):
             position: (3,) array of world coordiantes
             orientation: (4,) [x,y,z,w]
         """
-        # access the aviary (PyBullet client) through the env
-        aviary = self.env.env  # VectorVoyagerEnv -> Aviary
+        # access the aviary (PyBullet client)
+        aviary = self._base_env.env  # VectorVoyagerEnv.env -> Aviary
         drone_id = aviary.drones[0].Id
         
         # pos = [x, y, z] - position in meters
@@ -151,7 +153,7 @@ class LidarObservationWrapper(gym.ObservationWrapper):
 
         returns: (N, 3) array of direction vectors in world frame
         """
-        aviary = self.env.env
+        aviary = self._base_env.env
         # get rotation matrix form quaternion
         rot_matrix = np.array(aviary.getMatrixFromQuaternion(orientation)).reshape(3, 3)
 
@@ -165,7 +167,7 @@ class LidarObservationWrapper(gym.ObservationWrapper):
         returns:
             array of shape (num_rays_total,) with distances (or normalized distances)
         """
-        aviary = self.env.env
+        aviary = self._base_env.env
 
         # get UAV pose
         position, orientation = self._get_uav_pose()
@@ -245,7 +247,7 @@ class LidarObservationWrapper(gym.ObservationWrapper):
         Args:
             duration: How long the debug lines persist (seconds)
         """
-        aviary = self.env.env
+        aviary = self._base_env.env
         position, orientation = self._get_uav_pose()
         world_directions = self._rotate_directions_to_world(
             self._ray_directions, orientation

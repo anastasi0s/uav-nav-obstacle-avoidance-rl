@@ -6,6 +6,7 @@ reports/
 assets/
 drafts/
 run.log
+wandb/
 .ipynb_checkpoints/
 
 # Byte-compiled / optimized / DLL files

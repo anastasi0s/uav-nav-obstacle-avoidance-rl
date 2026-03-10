@@ -117,7 +117,7 @@ def _train(
         log_interval=params.log_interval,
     )
 
-# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train run-train --exp-name "exp" --timesteps 2_000_000 --eval-freq 200_000                                        
+# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train run-train --exp-name "exp" --wandb-tags --timesteps 2_000_000 --eval-freq 200_000                                        
 @app.command()
 def run_train(
     exp_name: str = "exp",
@@ -215,7 +215,7 @@ def sweep(
     logger.info(f"Starting sweep agent (sweep_id={sweep_id}, count={count})")
     wandb.agent(sweep_id, function=_sweep_train, count=count, project=wandb_project)
 
-#  uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train seed-sweep --exp-name "exp"--timesteps 2_000_000 --eval-freq 200_000 
+#  uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train seed-sweep --exp-name "exp" --wandb-tags ["tag",] --timesteps 2_000_000 --eval-freq 200_000 
 @app.command()
 def seed_sweep(
     exp_name: str = "exp",
@@ -227,6 +227,7 @@ def seed_sweep(
     log_interval: int = TrainParams.log_interval,
     verbose: int = TrainParams.verbose,
     sweep_id: Optional[str] = None,
+    wandb_tags: list[str] | None = None,
 ):
     """
     Run the same experiment with multiple seeds using a W&B grid sweep.
@@ -243,6 +244,7 @@ def seed_sweep(
             dir=config.REPORTS_DIR.as_posix(),
             save_code=True,
             settings=wandb.Settings(x_disable_stats=True),
+            tags=wandb_tags,
         ) as run:
             run.name = f"{exp_name}-{run.config['seed']}"
             _train(

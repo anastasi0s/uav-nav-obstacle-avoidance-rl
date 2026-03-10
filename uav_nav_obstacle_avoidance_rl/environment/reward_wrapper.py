@@ -46,17 +46,22 @@ class PyFlytRewardWrapper(gym.Wrapper):
                 # yaw_rate = abs(base_env.env.state(0)[0][2])  # angular velocity z-component
                 # r_yaw = -0.01 * yaw_rate ** 2
 
-        if info["collision"]:
-            reward = -self.collision_penalty
-        elif info["target_reached"]:
-            reward = self.target_reached_bonus
-        else:
-            reward = r_step + r_progress + r_distance
+        # collision overrides
+        r_collision = -self.collision_penalty if info["collision"] else 0.0
+
+        # target-reached overrides everything
+        r_target = self.target_reached_bonus if info["target_reached"] else 0.0
+
+        # –– total ––
+        reward = r_step + r_progress + r_distance + r_yaw + r_collision + r_target
 
         # log components for wandb
         info["reward_step"] = r_step
         info["reward_progress"] = r_progress
         info["reward_distance"] = r_distance
+        # info["reward_yaw"] = r_yaw
+        info["reward_collision"] = r_collision
+        info["reward_target"] = r_target
         info["reward_total"] = reward
 
         return obs, reward, terminated, truncated, info

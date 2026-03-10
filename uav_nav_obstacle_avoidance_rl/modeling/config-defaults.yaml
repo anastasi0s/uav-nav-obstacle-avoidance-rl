@@ -24,7 +24,7 @@ env:
   max_duration_seconds: 80.0        # max simulation time of the env
   flight_mode: 5                    # PyFlyt velocity control (u, v, vr, vz)
   angle_representation: "quaternion" # "euler" or "quaternion"
-  agent_hz: 30                      # looprate of the agent to environment interaction
+  agent_hz: 30                      # looprate of the agent to environment interaction 30Hz agent / 120Hz env -> 1(action agent) / 4(steps env) ratio
   render_mode: null                 # "human" or "rgb_array" or None
   render_resolution: [480, 480]
 
@@ -71,7 +71,7 @@ env:
 # When curriculum is disabled, env defaults above are used directly.
 # When enabled, each stage overrides env defaults for difficulty parameters.
 curriculum:
-  enabled: true
+  enabled: false
   advance_threshold: 0.8
   advance_patience: 5
   regress_threshold: 0.4

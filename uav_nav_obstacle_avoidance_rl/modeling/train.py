@@ -27,7 +27,7 @@ class TrainParams:
     timesteps: int = 2_000_000
     eval_freq: int = 200_000
     n_envs: int = 2
-    n_eval_episodes: int = 20
+    n_eval_episodes: int = 30
     log_interval: int = 10
     seed: int = 9
     verbose: int = 0

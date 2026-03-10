@@ -28,7 +28,7 @@ class TrainParams:
     eval_freq: int = 200_000
     n_envs: int = 2
     n_eval_episodes: int = 20
-    log_interval: int = 1
+    log_interval: int = 10
     seed: int = 9
     verbose: int = 0
 
@@ -117,7 +117,7 @@ def _train(
         log_interval=params.log_interval,
     )
 
-
+# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train run-train --exp-name "exp" --timesteps 2_000_000 --eval-freq 200_000                                        
 @app.command()
 def run_train(
     exp_name: str = "exp",
@@ -143,6 +143,7 @@ def run_train(
         config=exp_config,
         dir=config.REPORTS_DIR.as_posix(),
         monitor_gym=True,
+        save_code=True,
         settings=wandb.Settings(x_disable_stats=True),
     ) as run:
         _train(
@@ -160,6 +161,9 @@ def run_train(
         )
 
 
+# python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --count 50 --timesteps 2_000_000
+# # resume an existing sweep
+# python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --sweep-id abc123
 @app.command()
 def sweep(
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
@@ -186,6 +190,7 @@ def sweep(
             config=exp_config,
             group=sweep_id,
             dir=config.REPORTS_DIR.as_posix(),
+            save_code=True,
             settings=wandb.Settings(x_disable_stats=True),
         ) as run:
             _train(
@@ -210,7 +215,7 @@ def sweep(
     logger.info(f"Starting sweep agent (sweep_id={sweep_id}, count={count})")
     wandb.agent(sweep_id, function=_sweep_train, count=count, project=wandb_project)
 
-
+#  uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train seed-sweep --exp-name "exp"--timesteps 2_000_000 --eval-freq 200_000 
 @app.command()
 def seed_sweep(
     exp_name: str = "exp",
@@ -236,6 +241,7 @@ def seed_sweep(
             config=exp_config,
             group=sweep_id,
             dir=config.REPORTS_DIR.as_posix(),
+            save_code=True,
             settings=wandb.Settings(x_disable_stats=True),
         ) as run:
             run.name = f"{exp_name}-seed-{run.config['seed']}"

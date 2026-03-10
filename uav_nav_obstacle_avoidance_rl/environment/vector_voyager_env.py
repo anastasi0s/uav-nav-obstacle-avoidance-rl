@@ -158,9 +158,9 @@ class VectorVoyagerEnv(QuadXBaseEnv):
                 os.dup2(old_fd, 1)
                 os.close(old_fd)
 
-        # --- create new boundary walls
-        self.boundary_wall_ids.clear()
-        self._create_boundary_walls()
+        # # --- create new boundary walls
+        # self.boundary_wall_ids.clear()
+        # self._create_boundary_walls()
 
         # --- reset waypoint handler, which sets the current target -> create targets manually from voxel grid and overwrite the targets attribute
         self.waypoints.reset(self.env, self.np_random)
@@ -209,72 +209,62 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # update the current state
         self.state = {"attitude": attitude, "target_deltas": target_deltas}
 
-    # called in the step function of the QuadXBaseEnv parent class
+    def step(self, action: np.ndarray):
+        """Override to initialize sub-step collection lists before the physics loop."""
+        self.info["sub_progress"] = []
+        self.info["sub_distance"] = []
+        return super().step(action)
+
+    # called by QuadXBaseEnv.step() once per physics sub-step
     def compute_term_trunc_reward(self) -> None:
+        """Compute termination/truncation and collect per-sub-step data for reward wrappers.
+
+        Reward is set to 0.0 — external RewardWrapper is responsible for
+        computing the actual scalar. Dense shaping data (progress, distance)
+        is appended to lists each sub-step so the wrapper can accumulate
+        the same way the native implementation did.
         """
-        1. compute termination, truncation, and reward of the current timestep in self.compute_base_term_trunc_reward().
-        2. Computes rewards.
+        self.reward = 0.0  # neutral; wrapper will overwrite
 
-        reward flow:
-        reward = -0.1                          # base env sets beeing alive penalty
-        reward += dense_shaping                # compute_term_trunc_reward adds progress/distance bonuses
-        reward = -100.0  (if collision)        # 
-        reward = 100.0   (if target reached)   # overwrites everything
-        """
+        # ── truncation: episode time limit ──
+        if self.step_count > self.max_steps:
+            self.truncation |= True
 
-        # call my computation function that overwrites the base env function
-        self.compute_base_term_trunc_reward()
+        # ── termination: collision with any body ──
+        if np.any(self.env.contact_array[self.env.drones[0].Id]):
+            self.info["collision"] = True
+            self.termination |= True
+ 
+        # ## OOB limits are INVISIBLE to the agent!! -> use walls that prevent out of bounds and collisions with them are detectable 
+        # # check exceed rectangular bounds on cartesian grid_sizes
+        # lin_pos = self.env.state(0)[-1]  # get current position (lin_pos is at state[3])
+        # x, y, z = lin_pos  # [x, y, z]
 
-        # if not using sparse reward, add bonus rewards related to waypoint progression
-        if not self.sparse_reward:  # add: and not self.termination
-            self.reward += max(3.0 * self.waypoints.progress_to_next_target, 0.0)
-            self.reward += 0.1 / self.waypoints.distance_to_next_target
+        # if (
+        #     x < self.occupancy_grid.x_min
+        #     or x > self.occupancy_grid.x_max
+        #     or y < self.occupancy_grid.y_min
+        #     or y > self.occupancy_grid.y_max
+        #     or z > self.z_size  # z constrains the max hight the uav is allowed to fly. collision with the floor is checked above already!
+        # ):
+        #     # self.reward = -100.0
+        #     self.info["out_of_bounds"] = True
+        #     self.termination |= True
 
-        # on reaching the target waypoint
+        # ── per-sub-step dense shaping data ──
+        self.info["sub_progress"].append(float(self.waypoints.progress_to_next_target))
+        self.info["sub_distance"].append(float(self.waypoints.distance_to_next_target))
+
+        # ── scalar waypoint info (final sub-step value) ──
+        self.info["target_reached"] = bool(self.waypoints.target_reached)
+
+        # ── advance waypoints on reach ──
         if self.waypoints.target_reached:
-            self.reward = 100.0  # large reward bonus  # TODO increment reward instead of re-assigning
-
-            # go to the next target if available
             self.waypoints.advance_targets()
-
-            # update termination: if all targets are reached, signal environment completion
             self.truncation |= self.waypoints.all_targets_reached
             self.info["env_complete"] = self.waypoints.all_targets_reached
             self.info["num_targets_reached"] = self.waypoints.num_targets_reached
 
-    # part of the compute_term_trunc_reward call above
-    def compute_base_term_trunc_reward(self) -> None:
-        """
-        checks if:
-        1. episode ends
-        2. collision occurred
-        Custom base trmination, truncation and reward computation method that is overwritting the parent class
-        """
-        # exceed step count
-        if self.step_count > self.max_steps:
-            self.truncation |= True
-
-        # check for collisions between the drone and any other body in the space
-        if np.any(self.env.contact_array[self.env.drones[0].Id]):
-            self.reward = -100.0
-            self.info["collision"] = True
-            self.termination |= True
-
-        ## unnecessary since walls prevent out of bounds and collisions with them are detected above
-        # check exceed rectangular bounds on cartesian grid_sizes
-        lin_pos = self.env.state(0)[-1]  # get current position (lin_pos is at state[3])
-        x, y, z = lin_pos  # [x, y, z]
-
-        if (
-            x < self.occupancy_grid.x_min
-            or x > self.occupancy_grid.x_max
-            or y < self.occupancy_grid.y_min
-            or y > self.occupancy_grid.y_max
-            or z > self.z_size  # z constrains the max hight the uav is allowed to fly. collision with the floor is checked above already!
-        ):
-            self.reward = -100.0
-            self.info["out_of_bounds"] = True
-            self.termination |= True
 
     # ──────────────────────────────────────────────────────────────
     #  Environment Builders 

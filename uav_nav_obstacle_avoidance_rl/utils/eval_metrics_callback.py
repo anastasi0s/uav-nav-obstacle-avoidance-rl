@@ -114,7 +114,14 @@ class CustomEvalCallback(EvalCallback):
 
             success_rate = float(np.mean(self.current_eval_cycle_data["success"]))
 
-            # save best model and generate analysis plots on new best success rate
+            # generate analysis plots every eval cycle
+            if self.exp_analysis:
+                self._log_success_analysis()
+                self._log_trajectory_plot()
+                self._log_reward_decomposition_plot()
+                # self._log_correlation_matrix()
+
+            # save best model on new best success rate
             if success_rate > self.best_success_rate:
                 logger.info(f"Saved new best model with success rate: {success_rate:.2%} (prev: {self.best_success_rate:.2%})")
                 if self.best_model_save_path is not None:
@@ -124,13 +131,6 @@ class CustomEvalCallback(EvalCallback):
                         os.path.join(self.best_model_save_path, "best_model_success_rate")
                     )
                 self.best_success_rate = success_rate
-
-                # generate analysis plots only when we achieve a new best
-                if self.exp_analysis:
-                    self._log_success_analysis()
-                    self._log_trajectory_plot()
-                    self._log_reward_decomposition_plot()
-                    # self._log_correlation_matrix()
 
             if self.callback is not None:
                 continue_training = continue_training and self._on_event()
@@ -706,7 +706,7 @@ class CustomEvalCallback(EvalCallback):
                 )
 
                 wandb.log(
-                    {f"eval_episode/{group_key}/trajectory": wandb.Html(fig.to_html(include_plotlyjs="cdn"))},
+                    {f"eval_trajectory/{group_key}": wandb.Html(fig.to_html(include_plotlyjs="cdn"))},
                     step=self.num_timesteps,
                 )
 

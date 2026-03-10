@@ -9,7 +9,6 @@ env:
   # Waypoints
   num_targets: 1                    # [curriculum]
   target_distance_range: null       # [curriculum] [min_r, max_r] or None for unconstrained
-  sparse_reward: false
   use_yaw_targets: false            # toggles whether the agent must also align its yaw (heading) to a per‐waypoint target before that waypoint is considered “reached,” and whether yaw error is included in the observation.
   goal_reach_distance: 0.2          # distance in meters within which the target is considered reached
   goal_reach_angle: 0.1             # radians

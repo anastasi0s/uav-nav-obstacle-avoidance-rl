@@ -25,7 +25,6 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # waypoint parameters
         num_targets: int,
         target_distance_range: List[float] | None,
-        sparse_reward: bool,
         use_yaw_targets: bool,
         goal_reach_distance: float,
         goal_reach_angle: float,
@@ -59,7 +58,6 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         # waypoint parameters
         self.num_targets = num_targets
         self.target_distance_range = target_distance_range
-        self.sparse_reward = sparse_reward
         # obstacle parameters
         self.num_obstacles_range = num_obstacles_range
         self.obstacle_shapes = obstacle_shapes

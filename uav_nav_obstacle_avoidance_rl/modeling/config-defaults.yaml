@@ -41,7 +41,7 @@ env:
 
   # Reward Signal — select wrapper via `type`
   reward:
-    type: "pyflyt"              # "pyflyt" | "custom"
+    type: "custom"              # "pyflyt" | "custom"
 
     # ── PyFlytRewardWrapper (baseline, no obstacle awareness) ──
     # r_t = -P + max(3*progress, 0) + 0.1/dist + r_collision + r_target

@@ -117,7 +117,7 @@ def _train(
         log_interval=params.log_interval,
     )
 
-# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train run-train --exp-name "exp" --wandb-tags --timesteps 2_000_000 --eval-freq 200_000                                        
+# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train run-train --exp-name "exp" --wandb-tags tag1 --timesteps 2_000_000 --eval-freq 200_000                                        
 @app.command()
 def run_train(
     exp_name: str = "exp",
@@ -161,15 +161,11 @@ def run_train(
         )
 
 
-# # create sweep from file
-# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep \
-#   --sweep-config-path uav_nav_obstacle_avoidance_rl/modeling/exp-5-sweep.yaml \
-#   --count 25
+# # terminal 1: create sweep from file
+# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --sweep-config-path uav_nav_obstacle_avoidance_rl/modeling/exp-5-sweep.yaml --count 25
 
 # # terminal 2: join the same sweep
-# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep \
-#   --sweep-id abc123 \
-#   --count 25
+# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --sweep-id abc123 --count 25
 @app.command()
 def sweep(
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
@@ -223,7 +219,7 @@ def sweep(
     logger.info(f"Starting sweep agent (sweep_id={sweep_id}, count={count})")
     wandb.agent(sweep_id, function=_sweep_train, count=count, project=wandb_project)
 
-#  uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train seed-sweep --exp-name "exp" --wandb-tags ["tag",] --timesteps 2_000_000 --eval-freq 200_000 
+#  uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train seed-sweep --exp-name "exp-1" --wandb-tags tag1 --wandb-tags tag2 --timesteps 2_000_000 --eval-freq 200_000 
 @app.command()
 def seed_sweep(
     exp_name: str = "exp",

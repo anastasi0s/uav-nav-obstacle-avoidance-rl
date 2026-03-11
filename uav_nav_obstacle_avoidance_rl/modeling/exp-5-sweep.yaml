@@ -1,5 +1,5 @@
 method: bayes
-name: exp-5-reward-lidar-sweep
+name: exp-5-reward-half-norm-sweep
 metric:
   goal: maximize
   name: curriculum/success_rate

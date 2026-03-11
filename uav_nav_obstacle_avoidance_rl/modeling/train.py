@@ -161,9 +161,15 @@ def run_train(
         )
 
 
-# python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --count 50 --timesteps 2_000_000
-# # resume an existing sweep
-# python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --sweep-id abc123
+# # create sweep from file
+# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep \
+#   --sweep-config-path uav_nav_obstacle_avoidance_rl/modeling/exp-5-sweep.yaml \
+#   --count 25
+
+# # terminal 2: join the same sweep
+# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep \
+#   --sweep-id abc123 \
+#   --count 25
 @app.command()
 def sweep(
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
@@ -176,6 +182,7 @@ def sweep(
     seed: int = TrainParams.seed,
     verbose: int = TrainParams.verbose,
     sweep_id: Optional[str] = None,
+    sweep_config_path: Optional[Path] = None,
 ):
     """
     wandb sweep using Bayesian optimization
@@ -208,7 +215,8 @@ def sweep(
             )
 
     if sweep_id is None:
-        sweep_config = _load_config(config.SWEEP_CONFIG_PATH)
+        cfg_path = Path(sweep_config_path) if sweep_config_path else config.SWEEP_CONFIG_PATH
+        sweep_config = _load_config(cfg_path)
         sweep_id = wandb.sweep(sweep=sweep_config, project=wandb_project)
         logger.info(f"Created sweep with ID: {sweep_id}")
 

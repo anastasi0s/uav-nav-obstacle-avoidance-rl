@@ -42,7 +42,7 @@ env:
 
   # Reward Signal — select wrapper via `type`
   reward:
-    type: "pyflyt"              # "pyflyt" | "custom"
+    type: "custom"              # "pyflyt" | "custom"
 
     # ── PyFlytRewardWrapper (baseline, no obstacle awareness) ──
     # r_t = -P + max(3*progress, 0) + 0.1/dist + r_collision + r_target
@@ -52,15 +52,14 @@ env:
       target_reached_bonus: 100.0  # discrete bonus B for reaching a waypoint
       sparse_reward: false         # skip dense shaping (progress + distance) when true
 
-    # ── RewardWrapper (lidar-aware, obstacle avoidance) ──
+    # ── RewardWrapper (lidar-aware, squared-exponential obstacle penalty) ──
     # r_t = w_prog * r_prog + w_obs * r_obs + r_collision + r_target + r_step
+    # r_obs = -[max(0, exp(-k*d_min) - exp(-k*d_thresh))]^2
     custom:
-      d_attention: 5.0          # radius where obstacles start mattering
-      d_danger: 1.0             # radius for steep proximity penalty
-      d_floor: 0.1              # minimum distance for log functions
-      obs_lambda: 1.0           # weight for min-proximity term
+      k: 1.0                    # obstacle penalty steepness
+      d_thresh: 3.0             # obstacle activation range (meters)
       w_prog: 1.0               # weight for progress reward
-      w_obs: 0.01               # weight for obstacle avoidance reward
+      w_obs: 1.0                # weight for obstacle avoidance reward
       collision_penalty: 10.0   # terminal penalty C
       target_reached_bonus: 10.0  # discrete bonus B
       step_penalty: 0.01         # time cost P

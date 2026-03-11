@@ -13,7 +13,10 @@ from uav_nav_obstacle_avoidance_rl.environment.lidar_wrapper import (
 from uav_nav_obstacle_avoidance_rl.environment.normalize_obs_wrapper import (
     NormalizeObservationWrapper,
 )
-from uav_nav_obstacle_avoidance_rl.environment.reward_wrapper import PyFlytRewardWrapper
+from uav_nav_obstacle_avoidance_rl.environment.reward_wrapper import (
+    CustomRewardWrapper,
+    PyFlytRewardWrapper,
+)
 from uav_nav_obstacle_avoidance_rl.environment.vector_voyager_env import (
     VectorVoyagerEnv,
 )
@@ -45,12 +48,11 @@ def make_flat_voyager(**env_kwargs):
     if perception_mode == "lidar":
         env = LidarObservationWrapper(env, **lidar_kwargs)
 
-    # # 3.reward wrappers
+    # 3. reward wrappers
     if reward_type == "pyflyt":
         env = PyFlytRewardWrapper(env, **reward_kwargs)
-    # elif reward_type == "custom":
-    #     # works only with ray cast (lidar) measurements !!!
-    #     env = CustomRewardWrapper(env, **reward_kwargs)
+    elif reward_type == "custom":
+        env = CustomRewardWrapper(env, **reward_kwargs)
 
     # 4. normalization wrappers - normalize actions and observations (works with and without lidar)
     # env = RescaleAction(env, min_action=-1.0, max_action=1.0)

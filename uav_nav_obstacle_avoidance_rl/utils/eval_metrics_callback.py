@@ -706,7 +706,7 @@ class CustomEvalCallback(EvalCallback):
                 )
 
                 wandb.log(
-                    {f"eval_trajectory/{group_key}": wandb.Html(fig.to_html(include_plotlyjs="cdn"))},
+                    {f"eval_episode/{group_key}/eval_trajectory": wandb.Html(fig.to_html(include_plotlyjs="cdn"))},
                     step=self.num_timesteps,
                 )
 

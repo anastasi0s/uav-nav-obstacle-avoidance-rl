@@ -25,6 +25,15 @@ class CustomEvalCallback(EvalCallback):
         "reward_obs_approaching", "reward_obs_weighting", "reward_obs_mean_approach_penalty", "reward_obs_proximity",
     ]
 
+    # observation component labels
+    ATTITUDE_LABELS = [
+        "yaw_rate", "cos_yaw", "sin_yaw",
+        "vel_u", "vel_v", "vel_w",
+        "height_z",
+        "prev_act_u", "prev_act_v", "prev_act_vr", "prev_act_vz",
+    ]
+    ACTION_LABELS = ["act_u", "act_v", "act_vr", "act_vz"]
+
     def __init__(self, *args, **kwargs):
         self.exp_analysis = kwargs.pop("exp_analysis", True)
         seed = kwargs.pop("seed", None)
@@ -45,6 +54,9 @@ class CustomEvalCallback(EvalCallback):
 
         # best model tracking by success rate
         self.best_success_rate = -1.0
+
+        # ── detect observation structure for decomposition plots ──
+        self._detect_obs_structure()
 
     def _on_step(self) -> bool:
         """
@@ -90,6 +102,12 @@ class CustomEvalCallback(EvalCallback):
                 **{f"{k}_sum": [] for k in self.REWARD_COMPONENTS},
                 # per-episode per-step reward component histories (for trajectory plots)
                 **{f"{k}_history": [] for k in self.REWARD_COMPONENTS},
+                # per-episode observation/action histories (for decomposition plots)
+                "policy_obs_history": [],
+                "actions_history": [],
+                "raw_attitude_history": [],
+                "raw_target_deltas_history": [],
+                "raw_lidar_history": [],
             }
             self._is_success_buffer = []
 
@@ -119,6 +137,7 @@ class CustomEvalCallback(EvalCallback):
                 self._log_success_analysis()
                 self._log_trajectory_plot()
                 self._log_reward_decomposition_plot()
+                self._log_obs_action_decomposition_plot()
                 # self._log_correlation_matrix()
 
             # save best model on new best success rate
@@ -144,11 +163,22 @@ class CustomEvalCallback(EvalCallback):
             """
             custom callback for evaluate_policy that collects detailed metrics.
             this gets called after each step during evaluation.
+
+            Available locals from evaluate_policy:
+                observations  — flattened obs fed to model.predict() (pre-step)
+                actions       — actions returned by model.predict()
+                new_observations — flattened obs after env.step()
+                rewards, dones, infos — step results
+                i             — current env index in the per-env loop
             """
             try:
                 dones = locals_dict["dones"]
                 infos = locals_dict["infos"]
                 rewards = locals_dict["rewards"]
+
+                # observations/actions from evaluate_policy's locals
+                policy_obs = locals_dict.get("observations")   # (n_envs, obs_dim)
+                actions = locals_dict.get("actions")            # (n_envs, act_dim)
 
                 for env_idx in range(self.n_eval_envs):
                     ep = self.current_episode_data[env_idx]
@@ -164,6 +194,23 @@ class CustomEvalCallback(EvalCallback):
                     ep["positions"].append(lin_pos.copy())
                     ep["velocities"].append(lin_vel.copy())
                     ep["step_rewards"].append(float(rewards[env_idx]))
+
+                    # capture policy observation and action vectors
+                    if policy_obs is not None:
+                        ep["policy_obs"].append(policy_obs[env_idx].copy())
+                    if actions is not None:
+                        ep["actions"].append(actions[env_idx].copy())
+
+                    # capture raw (pre-normalization, pre-flatten) dict observation
+                    raw_state = underlying.state  # dict: attitude, target_deltas, (lidar via wrapper)
+                    raw_entry = {
+                        "attitude": raw_state["attitude"].copy(),
+                        "target_deltas": raw_state["target_deltas"].copy(),
+                    }
+                    # lidar raw values: walk wrappers to find LidarObservationWrapper's last cast
+                    if self._obs_has_lidar:
+                        raw_entry["lidar"] = self._get_raw_lidar(env_idx)
+                    ep["raw_obs"].append(raw_entry)
 
                     # accumulate per-step reward components from RewardWrapper
                     step_info = infos[env_idx]
@@ -271,6 +318,31 @@ class CustomEvalCallback(EvalCallback):
                 self.current_eval_cycle_data[f"{key}_history"].append(
                     np.array(values).copy() if values else np.array([])
                 )
+
+            # store observation/action histories
+            self.current_eval_cycle_data["policy_obs_history"].append(
+                np.array(ep["policy_obs"]).copy() if ep["policy_obs"] else np.array([])
+            )
+            self.current_eval_cycle_data["actions_history"].append(
+                np.array(ep["actions"]).copy() if ep["actions"] else np.array([])
+            )
+            # raw obs: stack each component separately
+            if ep["raw_obs"]:
+                self.current_eval_cycle_data["raw_attitude_history"].append(
+                    np.array([r["attitude"] for r in ep["raw_obs"]])
+                )
+                self.current_eval_cycle_data["raw_target_deltas_history"].append(
+                    np.array([r["target_deltas"] for r in ep["raw_obs"]])
+                )
+                if self._obs_has_lidar:
+                    self.current_eval_cycle_data["raw_lidar_history"].append(
+                        np.array([r["lidar"] for r in ep["raw_obs"]])
+                    )
+            else:
+                self.current_eval_cycle_data["raw_attitude_history"].append(np.array([]))
+                self.current_eval_cycle_data["raw_target_deltas_history"].append(np.array([]))
+                if self._obs_has_lidar:
+                    self.current_eval_cycle_data["raw_lidar_history"].append(np.array([]))
 
             # RESET for next episode
             self._reset_current_episode(env_idx)
@@ -825,12 +897,298 @@ class CustomEvalCallback(EvalCallback):
         except Exception as e:
             logger.exception(f"[EvalCallback] Error creating reward decomposition plot: {e}")
 
+    def _log_obs_action_decomposition_plot(self):
+        try:
+            picked = self._pick_trajectory_episodes()
+            if not picked:
+                return
+
+            for ep_idx, group_key, label in picked:
+                policy_obs = self.current_eval_cycle_data["policy_obs_history"][ep_idx]
+                actions = self.current_eval_cycle_data["actions_history"][ep_idx]
+                raw_attitude = self.current_eval_cycle_data["raw_attitude_history"][ep_idx]
+                raw_targets = self.current_eval_cycle_data["raw_target_deltas_history"][ep_idx]
+
+                if len(policy_obs) == 0:
+                    continue
+
+                n_steps = len(policy_obs)
+                steps = np.arange(n_steps)
+
+                # ── decompose the flattened policy observation ──
+                att_end = self._obs_attitude_size
+                policy_attitude = policy_obs[:, :att_end]
+
+                if self._obs_has_lidar:
+                    lidar_end = att_end + self._obs_lidar_size
+                    policy_lidar = policy_obs[:, att_end:lidar_end]
+                    policy_targets = policy_obs[:, lidar_end:]
+                else:
+                    policy_lidar = None
+                    policy_targets = policy_obs[:, att_end:]
+
+                raw_lidar = None
+                if self._obs_has_lidar:
+                    raw_lidar_data = self.current_eval_cycle_data["raw_lidar_history"][ep_idx]
+                    if len(raw_lidar_data) > 0:
+                        raw_lidar = raw_lidar_data
+
+                # determine whether normalization changes anything
+                has_norm_diff = self._obs_has_normalization
+
+                # ── determine subplot layout ──
+                # rows: 1=attitude, 2=target_deltas, 3=lidar_heatmap(raw), 4=lidar_summary, 5=actions
+                # if no lidar: 1=attitude, 2=target_deltas, 3=actions
+                # if normalization: double attitude and target rows (raw + policy)
+                rows = []
+                row_titles = []
+
+                # attitude
+                if has_norm_diff:
+                    rows.append("attitude_raw")
+                    row_titles.append("Attitude (Raw)")
+                    rows.append("attitude_policy")
+                    row_titles.append("Attitude (Policy / Normalized)")
+                else:
+                    rows.append("attitude")
+                    row_titles.append("Attitude")
+
+                # target deltas
+                if has_norm_diff:
+                    rows.append("targets_raw")
+                    row_titles.append("Target Deltas (Raw, meters)")
+                    rows.append("targets_policy")
+                    row_titles.append("Target Deltas (Policy / Normalized)")
+                else:
+                    rows.append("targets")
+                    row_titles.append("Target Deltas (meters)")
+
+                # lidar
+                if self._obs_has_lidar:
+                    rows.append("lidar_heatmap_raw")
+                    row_titles.append("LiDAR Raw Distances (heatmap)")
+                    if has_norm_diff:
+                        rows.append("lidar_heatmap_policy")
+                        row_titles.append("LiDAR Policy Values (heatmap)")
+                    rows.append("lidar_summary")
+                    row_titles.append("LiDAR Summary (min / mean / max)")
+
+                # actions
+                rows.append("actions")
+                row_titles.append("Actions")
+
+                n_rows = len(rows)
+
+                # assign row heights
+                heights = []
+                for r in rows:
+                    if "heatmap" in r:
+                        heights.append(0.22)
+                    else:
+                        heights.append(0.12)
+                # normalize to sum=1
+                total_h = sum(heights)
+                heights = [h / total_h for h in heights]
+
+                fig = make_subplots(
+                    rows=n_rows, cols=1,
+                    row_heights=heights,
+                    subplot_titles=row_titles,
+                    vertical_spacing=0.04,
+                )
+
+                COLORS = [
+                    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+                    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+                    "#636efa",
+                ]
+
+                row_idx = 1  # plotly 1-based
+
+                # helper: compute plotly domain midpoint for a given row
+                # (used to anchor colorbars next to their heatmap)
+                def _row_domain_mid(r_idx):
+                    """Approximate y-midpoint of subplot row r_idx (1-based)."""
+                    # row_heights are top-to-bottom in plotly subplots
+                    spacing = 0.04
+                    total_spacing = spacing * (n_rows - 1)
+                    usable = 1.0 - total_spacing
+                    # rows are laid out top (row 1) → bottom (row n_rows)
+                    cum = 0.0
+                    for r in range(1, n_rows + 1):
+                        h = heights[r - 1] * usable  # actual height fraction  (already normalized to sum≈1)
+                        # plotly normalizes row_heights internally but this gives a good approximation
+                        if r == r_idx:
+                            return 1.0 - cum - h * 0.5  # from the top
+                        cum += h + spacing
+                    return 0.5  # fallback
+
+                # ── ATTITUDE ──
+                if has_norm_diff:
+                    # raw
+                    for i, lbl in enumerate(self.ATTITUDE_LABELS):
+                        fig.add_trace(go.Scatter(
+                            x=steps, y=raw_attitude[:n_steps, i],
+                            mode="lines", name=lbl,
+                            line=dict(color=COLORS[i % len(COLORS)], width=1.5),
+                        ), row=row_idx, col=1)
+                    fig.update_yaxes(title_text="Value", row=row_idx, col=1)
+                    row_idx += 1
+                    # policy (normalized)
+                    for i, lbl in enumerate(self.ATTITUDE_LABELS):
+                        fig.add_trace(go.Scatter(
+                            x=steps, y=policy_attitude[:, i],
+                            mode="lines", name=f"{lbl} (norm)",
+                            line=dict(color=COLORS[i % len(COLORS)], width=1.5, dash="dot"),
+                        ), row=row_idx, col=1)
+                    fig.update_yaxes(title_text="Normalized", row=row_idx, col=1)
+                    row_idx += 1
+                else:
+                    for i, lbl in enumerate(self.ATTITUDE_LABELS):
+                        fig.add_trace(go.Scatter(
+                            x=steps, y=policy_attitude[:, i],
+                            mode="lines", name=lbl,
+                            line=dict(color=COLORS[i % len(COLORS)], width=1.5),
+                        ), row=row_idx, col=1)
+                    fig.update_yaxes(title_text="Value", row=row_idx, col=1)
+                    row_idx += 1
+
+                # ── TARGET DELTAS ──
+                # raw_targets shape: (n_steps, num_targets, target_dim) or (n_steps, target_dim) if 1 target
+                raw_tgt = raw_targets[:n_steps]
+                if raw_tgt.ndim == 3:
+                    raw_tgt = raw_tgt[:, 0, :]  # first target
+
+                pol_tgt = policy_targets[:, :self._obs_target_size]  # first target's values
+
+                TARGET_COLORS = ["#e6194b", "#3cb44b", "#4363d8", "#f58231"]
+
+                if has_norm_diff:
+                    for i, lbl in enumerate(self._target_labels):
+                        fig.add_trace(go.Scatter(
+                            x=steps, y=raw_tgt[:, i],
+                            mode="lines", name=lbl,
+                            line=dict(color=TARGET_COLORS[i], width=1.5),
+                        ), row=row_idx, col=1)
+                    fig.update_yaxes(title_text="Meters", row=row_idx, col=1)
+                    row_idx += 1
+                    for i, lbl in enumerate(self._target_labels):
+                        fig.add_trace(go.Scatter(
+                            x=steps, y=pol_tgt[:, i],
+                            mode="lines", name=f"{lbl} (norm)",
+                            line=dict(color=TARGET_COLORS[i], width=1.5, dash="dot"),
+                        ), row=row_idx, col=1)
+                    fig.update_yaxes(title_text="Normalized", row=row_idx, col=1)
+                    row_idx += 1
+                else:
+                    for i, lbl in enumerate(self._target_labels):
+                        fig.add_trace(go.Scatter(
+                            x=steps, y=pol_tgt[:, i],
+                            mode="lines", name=lbl,
+                            line=dict(color=TARGET_COLORS[i], width=1.5),
+                        ), row=row_idx, col=1)
+                    fig.update_yaxes(title_text="Meters", row=row_idx, col=1)
+                    row_idx += 1
+
+                # ── LIDAR ──
+                if self._obs_has_lidar:
+                    # raw lidar heatmap
+                    if raw_lidar is not None and len(raw_lidar) > 0:
+                        cb_y = _row_domain_mid(row_idx)
+                        fig.add_trace(go.Heatmap(
+                            z=raw_lidar[:n_steps].T,
+                            x=steps,
+                            y=list(range(self._obs_lidar_size)),
+                            colorscale="YlOrRd_r",
+                            colorbar=dict(title="Dist (m)", x=1.02, len=0.15, y=cb_y, yanchor="middle"),
+                            hovertemplate="Step: %{x}<br>Ray: %{y}<br>Distance: %{z:.2f} m<extra></extra>",
+                        ), row=row_idx, col=1)
+                        fig.update_yaxes(title_text="Ray Index", row=row_idx, col=1)
+                        row_idx += 1
+
+                    # policy lidar heatmap (if normalization active)
+                    if has_norm_diff and policy_lidar is not None:
+                        cb_y = _row_domain_mid(row_idx)
+                        fig.add_trace(go.Heatmap(
+                            z=policy_lidar.T,
+                            x=steps,
+                            y=list(range(self._obs_lidar_size)),
+                            colorscale="YlOrRd",
+                            colorbar=dict(title="Norm", x=1.08, len=0.15, y=cb_y, yanchor="middle"),
+                            hovertemplate="Step: %{x}<br>Ray: %{y}<br>Value: %{z:.3f}<extra></extra>",
+                        ), row=row_idx, col=1)
+                        fig.update_yaxes(title_text="Ray Index", row=row_idx, col=1)
+                        row_idx += 1
+
+                    # lidar summary lines (min, mean, max over rays per step)
+                    lidar_for_summary = raw_lidar[:n_steps] if raw_lidar is not None and len(raw_lidar) > 0 else policy_lidar
+                    if lidar_for_summary is not None:
+                        lidar_min = lidar_for_summary.min(axis=1)
+                        lidar_mean = lidar_for_summary.mean(axis=1)
+                        lidar_max = lidar_for_summary.max(axis=1)
+
+                        fig.add_trace(go.Scatter(
+                            x=steps, y=lidar_min, mode="lines", name="lidar_min",
+                            line=dict(color="#d62728", width=1.5),
+                        ), row=row_idx, col=1)
+                        fig.add_trace(go.Scatter(
+                            x=steps, y=lidar_mean, mode="lines", name="lidar_mean",
+                            line=dict(color="#ff7f0e", width=2),
+                        ), row=row_idx, col=1)
+                        fig.add_trace(go.Scatter(
+                            x=steps, y=lidar_max, mode="lines", name="lidar_max",
+                            line=dict(color="#2ca02c", width=1.5),
+                        ), row=row_idx, col=1)
+                        summary_unit = "m" if (raw_lidar is not None and len(raw_lidar) > 0) else "norm"
+                        fig.update_yaxes(title_text=f"Distance ({summary_unit})", row=row_idx, col=1)
+                        row_idx += 1
+
+                # ── ACTIONS ──
+                ACTION_COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
+                for i, lbl in enumerate(self.ACTION_LABELS):
+                    fig.add_trace(go.Scatter(
+                        x=steps, y=actions[:n_steps, i],
+                        mode="lines", name=lbl,
+                        line=dict(color=ACTION_COLORS[i], width=1.5),
+                    ), row=row_idx, col=1)
+                fig.update_yaxes(title_text="Action Value", row=row_idx, col=1)
+                fig.update_xaxes(title_text="Step", row=row_idx, col=1)
+
+                # ── layout ──
+                reward = self.current_eval_cycle_data["episode_rewards"][ep_idx]
+                success = self.current_eval_cycle_data["success"][ep_idx]
+                collision = self.current_eval_cycle_data["collision"][ep_idx]
+
+                fig.update_layout(
+                    title=dict(
+                        text=(
+                            f"[{label}] Observation & Action Decomposition "
+                            f"(Reward: {reward:.2f}, Success: {success}, Collision: {collision})"
+                        ),
+                        y=0.98,
+                    ),
+                    height=max(350 * n_rows, 900),
+                    width=1100,
+                    margin=dict(t=120, r=80),
+                    legend=dict(orientation="v", x=1.12, y=1.0),
+                )
+
+                wandb.log(
+                    {f"eval_episode/{group_key}/obs_action_decomposition": wandb.Html(fig.to_html(include_plotlyjs="cdn"))},
+                    step=self.num_timesteps,
+                )
+
+        except Exception as e:
+            logger.exception(f"[EvalCallback] Error creating obs/action decomposition plot: {e}")
+
     def _log_correlation_matrix(self):
         """Create and log correlation matrix plot to W&B"""
         try:
             df = pd.DataFrame(self.current_eval_cycle_data)
             history_cols = ["positions_history", "velocities_history", "target_position_history",
-                           "obstacles_history", "step_rewards_history"]
+                           "obstacles_history", "step_rewards_history",
+                           "policy_obs_history", "actions_history",
+                           "raw_attitude_history", "raw_target_deltas_history", "raw_lidar_history"]
             history_cols += [f"{k}_history" for k in self.REWARD_COMPONENTS]
             df = df.drop(columns=[c for c in history_cols if c in df.columns])
 
@@ -866,6 +1224,46 @@ class CustomEvalCallback(EvalCallback):
     #  Helpers
     # ──────────────────────────────────────────────────────────────
 
+    def _detect_obs_structure(self):
+        """Detect observation space structure by walking the wrapper chain of the first eval env."""
+        from uav_nav_obstacle_avoidance_rl.environment.lidar_wrapper import LidarFlattenWrapper
+        from uav_nav_obstacle_avoidance_rl.environment.normalize_obs_wrapper import NormalizeObservationWrapper
+
+        env = self.eval_env.envs[0] if hasattr(self.eval_env, "envs") else self.eval_env
+
+        self._obs_has_lidar = False
+        self._obs_has_normalization = False
+        self._obs_attitude_size = 11
+        self._obs_lidar_size = 0
+        self._obs_target_size = 3  # default without yaw targets
+
+        # walk wrapper chain
+        walker = env
+        while walker is not None:
+            if isinstance(walker, LidarFlattenWrapper):
+                self._obs_has_lidar = True
+                self._obs_lidar_size = walker._lidar_size
+                self._obs_target_size = walker._target_size
+                self._obs_attitude_size = walker._attitude_size
+            if isinstance(walker, NormalizeObservationWrapper):
+                self._obs_has_normalization = True
+            walker = getattr(walker, "env", None)
+
+        # build target delta labels
+        base_labels = ["target_dx", "target_dy", "target_dz"]
+        if self._obs_target_size == 4:
+            base_labels.append("target_dyaw")
+        self._target_labels = base_labels
+
+        # build lidar labels
+        self._lidar_labels = [f"lidar_{i}" for i in range(self._obs_lidar_size)]
+
+        logger.info(
+            f"[EvalCallback] Obs structure: attitude={self._obs_attitude_size}, "
+            f"lidar={self._obs_lidar_size} (has_lidar={self._obs_has_lidar}), "
+            f"target={self._obs_target_size}, normalization={self._obs_has_normalization}"
+        )
+
     def _reset_current_episode(self, env_idx=0):
         self.current_episode_data[env_idx] = {
             "positions": [],
@@ -877,7 +1275,23 @@ class CustomEvalCallback(EvalCallback):
             "obstacles": [],
             # per-step reward components (accumulated, then summed at episode end)
             **{k: [] for k in self.REWARD_COMPONENTS},
+            # observation/action tracking
+            "policy_obs": [],     # flattened observations fed to the policy
+            "raw_obs": [],        # raw dict observations from the base env (before normalization/flatten)
+            "actions": [],        # actions output by the policy
         }
+
+    def _get_raw_lidar(self, env_idx: int) -> np.ndarray:
+        """Get raw (un-normalized) lidar distances from the LidarObservationWrapper."""
+        from uav_nav_obstacle_avoidance_rl.environment.lidar_wrapper import LidarObservationWrapper
+
+        env = self.eval_env.envs[env_idx] if hasattr(self.eval_env, "envs") else self.eval_env
+        walker = env
+        while walker is not None:
+            if isinstance(walker, LidarObservationWrapper):
+                return walker._cast_rays()
+            walker = getattr(walker, "env", None)
+        return np.array([])
 
     def _calculate_path_length(self, positions) -> float:
         """Calculate total distance traveled"""

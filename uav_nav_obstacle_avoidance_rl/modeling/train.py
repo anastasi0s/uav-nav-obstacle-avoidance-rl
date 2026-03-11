@@ -7,7 +7,6 @@ import wandb
 import yaml
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import VecNormalize
 from wandb.integration.sb3 import WandbCallback
 
 from uav_nav_obstacle_avoidance_rl import config
@@ -60,8 +59,6 @@ def _train(
     )
 
     base_env_test.analyse_env(vec_env)
-    vec_env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, clip_obs=10.0)
-    base_env_test.analyse_env(vec_env)
 
     # create separate evaluation env
     vec_env_eval = make_vec_env(
@@ -70,8 +67,6 @@ def _train(
         env_kwargs=env_config,
         monitor_kwargs=monitor_info,
     )
-
-    vec_env_eval = VecNormalize(vec_env_eval, norm_obs=True, norm_reward=True, clip_obs=10.0)
 
     # ----- callbacks --------
     callbacks = []

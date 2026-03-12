@@ -144,17 +144,19 @@ class CurriculumCallback(BaseCallback):
             # triggers reset on all sub envs, ensuring all new episodes start under new difficulty
             self.training_env.env_method('reset')
 
-        logger.info(f"[Curriculum] Stage Transition: {old_idx} → {new_idx}")
+        logger.info(f"[Curriculum] Stage Transition: {old_idx} → {new_idx}. Success Rate: {np.mean(self.success_window)}")
 
         # log wandb
         wandb.log({"curriculum/stage": new_idx}, step=self.num_timesteps)
 
     def _log_metrics(self, success_rate):
         """Log curriculum metrics to W&B"""
+        composite = success_rate * (self.current_stage_idx / (self.num_stages - 1))
         wandb.log(
             {
                 "curriculum/stage": self.current_stage_idx,
                 "curriculum/success_rate": success_rate,
+                "curriculum/composite_success_rate": composite,
                 "curriculum/streak": self._streak,
             },
             step=self.num_timesteps,

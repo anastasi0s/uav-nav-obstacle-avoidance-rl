@@ -156,9 +156,9 @@ class VectorVoyagerEnv(QuadXBaseEnv):
                 os.dup2(old_fd, 1)
                 os.close(old_fd)
 
-        # --- create new boundary walls
-        self.boundary_wall_ids.clear()
-        self._create_boundary_walls()
+        # # --- create new boundary walls
+        # self.boundary_wall_ids.clear()
+        # self._create_boundary_walls()
 
         # --- reset waypoint handler, which sets the current target -> create targets manually from voxel grid and overwrite the targets attribute
         self.waypoints.reset(self.env, self.np_random)
@@ -245,7 +245,6 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         #     or y > self.occupancy_grid.y_max
         #     or z > self.z_size  # z constrains the max hight the uav is allowed to fly. collision with the floor is checked above already!
         # ):
-        #     # self.reward = -100.0
         #     self.info["out_of_bounds"] = True
         #     self.termination |= True
 

@@ -69,11 +69,11 @@ env:
 # When enabled, each stage overrides env defaults for difficulty parameters.
 curriculum:
   enabled: true
-  advance_threshold: 0.8
-  advance_patience: 5
-  regress_threshold: 0.4
-  regress_patience: 3
-  window_size: 20                   # episodes: window_size * (2400steps/episode) =
+  advance_threshold: 0.8            # success rate over window to advance to next stage
+  advance_patience: 8               # consecutive windows above threshold before advancing
+  regress_threshold: 0.3            # success rate over window to regress to previous stage
+  regress_patience: 10              # consecutive windows below threshold before regressing
+  window_size: 20                   # number of episodes per evaluation window
   stages:
     - stage: 0
       desc: "Open space — learn flight and navigation"

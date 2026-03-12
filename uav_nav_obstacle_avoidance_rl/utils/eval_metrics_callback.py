@@ -386,7 +386,8 @@ class CustomEvalCallback(EvalCallback):
         wandb.log(eval_metrics, step=self.num_timesteps)
         logger.info(f"[EvalCallback] Eval cycle logged: {n_episodes} episodes, "
                      f"success_rate={eval_metrics['eval_cycle/success_rate']:.2f}, "
-                    #  f"all_targets_reached_rate={eval_metrics['eval_cycle/all_targets_reached_rate']:.2f}")
+                    #  f"all_targets_reached_rate={eval_metrics['eval_cycle/all_targets_reached_rate']:.2f}"
+        )
 
 
     # ──────────────────────────────────────────────────────────────
@@ -568,11 +569,66 @@ class CustomEvalCallback(EvalCallback):
                 fig = go.Figure()
 
                 # ── boundary wireframe ───────────────────────────────
-                x_min = self.underlying_envs[0].occupancy_grid.x_min
-                x_max = self.underlying_envs[0].occupancy_grid.x_max
-                y_min = self.underlying_envs[0].occupancy_grid.y_min
-                y_max = self.underlying_envs[0].occupancy_grid.y_max
+                occ_grid = self.underlying_envs[0].occupancy_grid
+                x_min = occ_grid.x_min
+                x_max = occ_grid.x_max
+                y_min = occ_grid.y_min
+                y_max = occ_grid.y_max
                 z_min, z_max = 0.0, self.underlying_envs[0].z_size
+
+                # ── occupancy grid floor ─────────────────────────────
+                cell_size = occ_grid.cell_size
+                nx, ny = occ_grid.nx, occ_grid.ny
+                grid_state = occ_grid.get_occupancy()  # shape (nx, ny), bool
+
+                # grid lines along X (constant y, varying x)
+                grid_x_lines, grid_y_lines, grid_z_lines = [], [], []
+                for j in range(ny + 1):
+                    y_pos = y_min + j * cell_size
+                    grid_x_lines += [x_min, x_max, None]
+                    grid_y_lines += [y_pos, y_pos, None]
+                    grid_z_lines += [z_min, z_min, None]
+                # grid lines along Y (constant x, varying y)
+                for i in range(nx + 1):
+                    x_pos = x_min + i * cell_size
+                    grid_x_lines += [x_pos, x_pos, None]
+                    grid_y_lines += [y_min, y_max, None]
+                    grid_z_lines += [z_min, z_min, None]
+
+                fig.add_trace(go.Scatter3d(
+                    x=grid_x_lines, y=grid_y_lines, z=grid_z_lines,
+                    mode='lines',
+                    line=dict(color='rgba(100,100,200,0.25)', width=1),
+                    showlegend=False, hoverinfo='skip',
+                ))
+
+                # occupied cells as shaded quads on the floor
+                occ_indices = np.argwhere(grid_state)  # shape (N, 2)
+                if len(occ_indices) > 0:
+                    # build a Mesh3d with two triangles per occupied cell
+                    vx, vy, vz = [], [], []
+                    fi, fj, fk = [], [], []
+                    for idx, (ci, cj) in enumerate(occ_indices):
+                        cx0 = x_min + ci * cell_size
+                        cx1 = cx0 + cell_size
+                        cy0 = y_min + cj * cell_size
+                        cy1 = cy0 + cell_size
+                        base = idx * 4
+                        vx += [cx0, cx1, cx1, cx0]
+                        vy += [cy0, cy0, cy1, cy1]
+                        vz += [z_min, z_min, z_min, z_min]
+                        fi += [base, base + 1]
+                        fj += [base + 1, base + 2]
+                        fk += [base + 2, base + 3]
+                    fig.add_trace(go.Mesh3d(
+                        x=vx, y=vy, z=vz,
+                        i=fi, j=fj, k=fk,
+                        color='#ff5050',
+                        opacity=0.35,
+                        name='Occupied cells',
+                        showlegend=True,
+                        hovertemplate='Occupied cell<extra></extra>',
+                    ))
 
                 verts = np.array([
                     [x_min, y_min, z_min], [x_max, y_min, z_min],

@@ -69,10 +69,10 @@ env:
 # When enabled, each stage overrides env defaults for difficulty parameters.
 curriculum:
   enabled: true
-  advance_threshold: 0.8            # success rate over window to advance to next stage
+  advance_threshold: 0.7            # success rate over window to advance to next stage
   advance_patience: 8               # consecutive windows above threshold before advancing
   regress_threshold: 0.3            # success rate over window to regress to previous stage
-  regress_patience: 10              # consecutive windows below threshold before regressing
+  regress_patience: 20              # consecutive windows below threshold before regressing
   window_size: 20                   # number of episodes per evaluation window
   stages:
     - stage: 0
@@ -87,13 +87,13 @@ curriculum:
 
     - stage: 1
       desc: "A few obstacles along the flight path"
-      num_obstacles_range: [1, 3]
+      num_obstacles_range: [2, 4]
       obstacle_shapes: ["cylinder"]
       obstacle_size_range: [0.3, 0.8]
       obstacle_placement: "along_path"
-      obstacle_distance_range: [2.0, 5.0]
+      obstacle_distance_range: [6.0, 8.0]
       num_targets: 1
-      target_distance_range: [3.0, 6.0]
+      target_distance_range: [10.0, 12.0]
 
     - stage: 2
       desc: "More obstacles, introduce boxes"

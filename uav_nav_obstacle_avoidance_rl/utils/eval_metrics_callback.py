@@ -365,7 +365,7 @@ class CustomEvalCallback(EvalCallback):
             sums = self.current_eval_cycle_data[f"{key}_sum"]
             if sums:
                 # ep_sum_eval = per-episode reward sum, averaged over the eval cycle
-                reward_component_metrics[f"eval_cycle_cum_reward/{component_name}_cycle"] = float(np.mean(sums))
+                reward_component_metrics[f"eval_cycle_cum_reward/{component_name}"] = float(np.mean(sums))
 
         eval_metrics = {
             # success = all targets reached AND no collision

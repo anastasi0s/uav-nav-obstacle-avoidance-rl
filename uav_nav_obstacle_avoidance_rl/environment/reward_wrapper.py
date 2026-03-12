@@ -105,7 +105,9 @@ class CustomRewardWrapper(gym.Wrapper):
         # log components for wandb
         info["reward_step"] = r_step
         info["reward_progress"] = r_prog
+        info["reward_progress_weighted"] = self.w_prog * r_prog
         info["reward_obstacle"] = r_obs
+        info["reward_obstacle_weighted"] = self.w_obs * r_obs
         info["reward_collision"] = r_collision
         info["reward_target"] = r_target
         info["reward_total"] = reward

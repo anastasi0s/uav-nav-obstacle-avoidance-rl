@@ -222,6 +222,7 @@ def sweep(
 #  uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train seed-sweep --exp-name "exp-1" --wandb-tags tag1 --wandb-tags tag2 --timesteps 2_000_000 --eval-freq 200_000 
 @app.command()
 def seed_sweep(
+    sweep_id: str,
     exp_name: str = "exp",
     wandb_project: str = "uav-nav-obstacle-avoidance-rl",
     timesteps: int = TrainParams.timesteps,
@@ -230,7 +231,6 @@ def seed_sweep(
     n_eval_episodes: int = TrainParams.n_eval_episodes,
     log_interval: int = TrainParams.log_interval,
     verbose: int = TrainParams.verbose,
-    sweep_id: Optional[str] = None,
     wandb_tags: list[str] | None = None,
 ):
     """
@@ -244,13 +244,13 @@ def seed_sweep(
     def _seed_sweep_train():
         with wandb.init(
             config=exp_config,
-            group=sweep_name,
+            group=exp_name,
             dir=config.REPORTS_DIR.as_posix(),
             save_code=True,
             settings=wandb.Settings(x_disable_stats=True),
             tags=wandb_tags,
         ) as run:
-            run.name = f"{exp_name}-{run.config['seed']}"
+            run.name = f"{exp_name}-seed-{run.config['seed']}"
             _train(
                 run=run,
                 params=TrainParams(
@@ -265,12 +265,11 @@ def seed_sweep(
                 exp_analysis=False,
             )
 
-    sweep_name = exp_name
-    if sweep_id is None:
-        sweep_config = _load_config(config.SEED_SWEEP_CONFIG_PATH)
-        sweep_config["name"] = sweep_name
-        sweep_id = wandb.sweep(sweep=sweep_config, project=wandb_project)
-        logger.info(f"Created seed sweep with ID: {sweep_id}")
+
+    sweep_config = _load_config(Path(sweep_id))
+    sweep_config["name"] = f"{exp_name}-seed-{sweep_config['name']}"
+    sweep_id = wandb.sweep(sweep=sweep_config, project=wandb_project)
+    logger.info(f"Created seed sweep with ID: {sweep_id}")
 
     logger.info(f"Starting seed sweep agent (sweep_id={sweep_id})")
     wandb.agent(sweep_id, function=_seed_sweep_train, project=wandb_project)

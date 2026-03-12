@@ -2,7 +2,7 @@ method: bayes
 name: exp-5-reward-lidar-sweep
 metric:
   goal: maximize
-  name: curriculum/success_rate
+  name: curriculum/composite_success_rate
 
 parameters:
   # Custom reward parameters

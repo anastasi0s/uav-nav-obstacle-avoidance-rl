@@ -151,10 +151,12 @@ class CurriculumCallback(BaseCallback):
 
     def _log_metrics(self, success_rate):
         """Log curriculum metrics to W&B"""
+        composite = success_rate * (self.current_stage_idx / (self.num_stages - 1))
         wandb.log(
             {
                 "curriculum/stage": self.current_stage_idx,
                 "curriculum/success_rate": success_rate,
+                "curriculum/composite_success_rate": composite,
                 "curriculum/streak": self._streak,
             },
             step=self.num_timesteps,

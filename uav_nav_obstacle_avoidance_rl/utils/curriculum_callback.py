@@ -144,7 +144,7 @@ class CurriculumCallback(BaseCallback):
             # triggers reset on all sub envs, ensuring all new episodes start under new difficulty
             self.training_env.env_method('reset')
 
-        logger.info(f"[Curriculum] Stage Transition: {old_idx} → {new_idx}")
+        logger.info(f"[Curriculum] Stage Transition: {old_idx} → {new_idx}. Success Rate: {np.mean(self.success_window)}")
 
         # log wandb
         wandb.log({"curriculum/stage": new_idx}, step=self.num_timesteps)

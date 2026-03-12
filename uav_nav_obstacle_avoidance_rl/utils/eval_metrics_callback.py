@@ -84,7 +84,6 @@ class CustomEvalCallback(EvalCallback):
             self.current_eval_cycle_data = {
                 "success": [],
                 "collision": [],
-                "env_complete": [],
                 "num_targets": [],
                 "targets_reached": [],
                 "episode_rewards": [],
@@ -259,12 +258,11 @@ class CustomEvalCallback(EvalCallback):
             ep = self.current_episode_data[env_idx]
 
             collision = info["collision"]
-            env_complete = info["env_complete"]
             targets_reached = info["num_targets_reached"]
             episode_reward = info["episode"]["r"]
             episode_length = info["episode"]["l"]
 
-            success = env_complete and not collision
+            success = info["env_complete"] and not collision
 
             path_length = self._calculate_path_length(ep["positions"])
             mean_velocity = self._calculate_average_velocity(ep["velocities"])
@@ -279,7 +277,6 @@ class CustomEvalCallback(EvalCallback):
 
             self.current_eval_cycle_data["success"].append(int(success))
             self.current_eval_cycle_data["collision"].append(int(collision))
-            self.current_eval_cycle_data["env_complete"].append(int(env_complete))
             self.current_eval_cycle_data["targets_reached"].append(targets_reached)
             self.current_eval_cycle_data["num_targets"].append(len(ep["target_position"]))
             self.current_eval_cycle_data["episode_rewards"].append(episode_reward)
@@ -375,9 +372,9 @@ class CustomEvalCallback(EvalCallback):
             # _cycle suffix = averaged over all episodes in this eval cycle
             "eval_cycle/success_rate": np.mean(self.current_eval_cycle_data["success"]),
             "eval_cycle/collision_rate": np.mean(self.current_eval_cycle_data["collision"]),
-            # all_targets_reached_rate = env_complete (targets reached, regardless of collision)
-            "eval_cycle/all_targets_reached_rate": np.mean(self.current_eval_cycle_data["env_complete"]),
             "eval_cycle/targets_reached": np.mean(self.current_eval_cycle_data["targets_reached"]),
+            "eval_cycle/num_targets": np.mean(self.current_eval_cycle_data["num_targets"]),
+            "eval_cycle/num_obstacles": np.mean(self.current_eval_cycle_data["num_obstacles"]),
             "eval_cycle/mean_velocity": np.mean(self.current_eval_cycle_data["mean_velocities"]),
             "eval_cycle/path_length": np.mean(self.current_eval_cycle_data["path_lengths"]),
             "eval_cycle/path_efficiency": np.mean(self.current_eval_cycle_data["path_efficiencies"]),
@@ -389,7 +386,7 @@ class CustomEvalCallback(EvalCallback):
         wandb.log(eval_metrics, step=self.num_timesteps)
         logger.info(f"[EvalCallback] Eval cycle logged: {n_episodes} episodes, "
                      f"success_rate={eval_metrics['eval_cycle/success_rate']:.2f}, "
-                     f"all_targets_reached_rate={eval_metrics['eval_cycle/all_targets_reached_rate']:.2f}")
+                    #  f"all_targets_reached_rate={eval_metrics['eval_cycle/all_targets_reached_rate']:.2f}")
 
 
     # ──────────────────────────────────────────────────────────────
@@ -418,14 +415,14 @@ class CustomEvalCallback(EvalCallback):
                     "Episode Length Distribution",
                     "Metrics Box Plot Comparison",
                     "Success vs Failure Rate",
-                    "",
-                    "",
+                    "Num Obstacles Distribution",
+                    "Num Targets Distribution",
                     "Failure Reasons Distribution",
                 ),
                 specs=[
                     [{"secondary_y": False}, {"secondary_y": False}, {"secondary_y": False}],
                     [{"secondary_y": False}, {"secondary_y": False}, {"type": "domain"}],
-                    [{"secondary_y": False, "colspan": 2}, None, {"type": "domain"}],
+                    [{"secondary_y": False}, {"secondary_y": False}, {"type": "domain"}],
                 ],
             )
 
@@ -435,6 +432,8 @@ class CustomEvalCallback(EvalCallback):
                 ("mean_velocities",  "Velocity (m/s)",    1, 2, "x2", "y2 domain"),
                 ("episode_rewards",  "Episode Reward",    1, 3, "x3", "y3 domain"),
                 ("episode_lengths",  "Steps per Episode", 2, 1, "x4", "y4 domain"),
+                ("num_obstacles",    "Num Obstacles",     3, 1, "x7", "y7 domain"),
+                ("num_targets",      "Num Targets",       3, 2, "x8", "y8 domain"),
             ]
 
             for i, (col, xlabel, row, c, xref, yref) in enumerate(hist_configs):
@@ -451,7 +450,7 @@ class CustomEvalCallback(EvalCallback):
                 fig.update_yaxes(title_text="Frequency", row=row, col=c)
 
             # --- box plot comparison ---
-            for metric in ["path_lengths", "mean_velocities", "episode_rewards", "episode_lengths"]:
+            for metric in ["path_lengths", "mean_velocities", "episode_rewards", "episode_lengths", "num_obstacles", "num_targets"]:
                 fig.add_trace(go.Box(y=success_df[metric], name=f"{metric} (S)", marker_color="lightgreen", showlegend=False), row=2, col=2)
                 fig.add_trace(go.Box(y=failure_df[metric], name=f"{metric} (F)", marker_color="lightcoral", showlegend=False), row=2, col=2)
 

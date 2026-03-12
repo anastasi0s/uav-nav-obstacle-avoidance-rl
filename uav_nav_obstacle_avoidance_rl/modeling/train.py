@@ -116,7 +116,9 @@ def _train(
         log_interval=params.log_interval,
     )
 
-# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train run-train --exp-name "exp" --wandb-tags tag1 --timesteps 2_000_000 --eval-freq 200_000                                        
+"""
+uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train run-train --exp-name "exp" --wandb-tags tag1 --timesteps 2_000_000 --eval-freq 200_000                      
+"""
 @app.command()
 def run_train(
     exp_name: str = "exp",
@@ -159,14 +161,15 @@ def run_train(
             exp_analysis=exp_analysis,
         )
 
+"""
+# terminal 1: create new sweep 
+uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep ---exp-name "name" --wandb-tags exp- --count 25
+# with custom sweep config:
+uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep ---exp-name "name" --wandb-tags exp- --sweep-config uav_nav_obstacle_avoidance_rl/modeling/exp-5-sweep.yaml --count 25
 
-# # terminal 1: create new sweep
-# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --exp-name "exp-5" --count 25
-# # with custom sweep config:
-# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --exp-name "exp-5" --sweep-config uav_nav_obstacle_avoidance_rl/modeling/exp-5-sweep.yaml --count 25
-
-# # terminal 2: join existing sweep
-# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --sweep-id abc123 --count 25
+# terminal 2: join existing sweep 
+uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep ---exp-name "name" --wandb-tags exp- --sweep-id abc123 --count 25
+"""
 @app.command()
 def sweep(
     exp_name: str = "exp-",
@@ -228,10 +231,10 @@ def sweep(
     logger.info(f"Starting sweep agent (sweep_id={active_sweep_id}, count={count})")
     wandb.agent(active_sweep_id, function=_sweep_train, count=count, project=wandb_project)
 
-# # Seed Sweep — create new
-# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train seed-sweep --exp-name "exp-1" --wandb-tags tag1 --wandb-tags tag2 --timesteps 2_000_000 --eval-freq 200_000
-# # join existing seed sweep
-# uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train seed-sweep --sweep-id abc123
+"""
+uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train seed-sweep --exp-name "name" --wandb-tags seed --wandb-tags exp- --timesteps 2_000_000 --eval-freq 200_000
+uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train seed-sweep --exp-name "name" --wandb-tags seed --wandb-tags exp- --timesteps 2_000_000 --eval-freq 200_000 --sweep-id abc123
+"""
 @app.command()
 def seed_sweep(
     exp_name: str = "exp-",
@@ -265,7 +268,7 @@ def seed_sweep(
             settings=wandb.Settings(x_disable_stats=True),
             tags=wandb_tags,
         ) as run:
-            run.name = f"{exp_name}-seed-{run.config['seed']}"
+            run.name = f"{exp_name}-{run.config['seed']}"
             _train(
                 run=run,
                 params=TrainParams(

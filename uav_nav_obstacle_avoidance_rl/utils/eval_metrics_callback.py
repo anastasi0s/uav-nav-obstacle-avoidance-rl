@@ -1030,6 +1030,7 @@ class CustomEvalCallback(EvalCallback):
                         fig.add_trace(go.Scatter(
                             x=steps, y=raw_attitude[:n_steps, i],
                             mode="lines", name=lbl,
+                            legendgroup="attitude_raw", legendgrouptitle_text="Attitude (Raw)",
                             line=dict(color=COLORS[i % len(COLORS)], width=1.5),
                         ), row=row_idx, col=1)
                     fig.update_yaxes(title_text="Value", row=row_idx, col=1)
@@ -1039,6 +1040,7 @@ class CustomEvalCallback(EvalCallback):
                         fig.add_trace(go.Scatter(
                             x=steps, y=policy_attitude[:, i],
                             mode="lines", name=f"{lbl} (norm)",
+                            legendgroup="attitude_policy", legendgrouptitle_text="Attitude (Normalized)",
                             line=dict(color=COLORS[i % len(COLORS)], width=1.5, dash="dot"),
                         ), row=row_idx, col=1)
                     fig.update_yaxes(title_text="Normalized", row=row_idx, col=1)
@@ -1048,6 +1050,7 @@ class CustomEvalCallback(EvalCallback):
                         fig.add_trace(go.Scatter(
                             x=steps, y=policy_attitude[:, i],
                             mode="lines", name=lbl,
+                            legendgroup="attitude", legendgrouptitle_text="Attitude",
                             line=dict(color=COLORS[i % len(COLORS)], width=1.5),
                         ), row=row_idx, col=1)
                     fig.update_yaxes(title_text="Value", row=row_idx, col=1)
@@ -1068,6 +1071,7 @@ class CustomEvalCallback(EvalCallback):
                         fig.add_trace(go.Scatter(
                             x=steps, y=raw_tgt[:, i],
                             mode="lines", name=lbl,
+                            legendgroup="targets_raw", legendgrouptitle_text="Target Deltas (Raw)",
                             line=dict(color=TARGET_COLORS[i], width=1.5),
                         ), row=row_idx, col=1)
                     fig.update_yaxes(title_text="Meters", row=row_idx, col=1)
@@ -1076,6 +1080,7 @@ class CustomEvalCallback(EvalCallback):
                         fig.add_trace(go.Scatter(
                             x=steps, y=pol_tgt[:, i],
                             mode="lines", name=f"{lbl} (norm)",
+                            legendgroup="targets_policy", legendgrouptitle_text="Target Deltas (Normalized)",
                             line=dict(color=TARGET_COLORS[i], width=1.5, dash="dot"),
                         ), row=row_idx, col=1)
                     fig.update_yaxes(title_text="Normalized", row=row_idx, col=1)
@@ -1085,6 +1090,7 @@ class CustomEvalCallback(EvalCallback):
                         fig.add_trace(go.Scatter(
                             x=steps, y=pol_tgt[:, i],
                             mode="lines", name=lbl,
+                            legendgroup="targets", legendgrouptitle_text="Target Deltas",
                             line=dict(color=TARGET_COLORS[i], width=1.5),
                         ), row=row_idx, col=1)
                     fig.update_yaxes(title_text="Meters", row=row_idx, col=1)
@@ -1129,14 +1135,17 @@ class CustomEvalCallback(EvalCallback):
 
                         fig.add_trace(go.Scatter(
                             x=steps, y=lidar_min, mode="lines", name="lidar_min",
+                            legendgroup="lidar_summary", legendgrouptitle_text="LiDAR Summary",
                             line=dict(color="#d62728", width=1.5),
                         ), row=row_idx, col=1)
                         fig.add_trace(go.Scatter(
                             x=steps, y=lidar_mean, mode="lines", name="lidar_mean",
+                            legendgroup="lidar_summary",
                             line=dict(color="#ff7f0e", width=2),
                         ), row=row_idx, col=1)
                         fig.add_trace(go.Scatter(
                             x=steps, y=lidar_max, mode="lines", name="lidar_max",
+                            legendgroup="lidar_summary",
                             line=dict(color="#2ca02c", width=1.5),
                         ), row=row_idx, col=1)
                         summary_unit = "m" if (raw_lidar is not None and len(raw_lidar) > 0) else "norm"
@@ -1149,6 +1158,7 @@ class CustomEvalCallback(EvalCallback):
                     fig.add_trace(go.Scatter(
                         x=steps, y=actions[:n_steps, i],
                         mode="lines", name=lbl,
+                        legendgroup="actions", legendgrouptitle_text="Actions",
                         line=dict(color=ACTION_COLORS[i], width=1.5),
                     ), row=row_idx, col=1)
                 fig.update_yaxes(title_text="Action Value", row=row_idx, col=1)

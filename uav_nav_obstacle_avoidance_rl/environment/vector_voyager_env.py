@@ -68,6 +68,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.num_obs = 0                                # for the case num_obstacles_range = [0,0]
         self.obstacles = []                             # store PyBullet body IDs
         self.boundary_wall_ids = []                     # store PyBullet body IDs for walls
+        self.walls_enabled = False                       # toggled by curriculum set_stage()
 
         # Note: obstacles are created in the first reset() call when self.env (Aviary/Pybullet client) is available. Pybullet connections from gym are created after env reset()
 
@@ -156,9 +157,10 @@ class VectorVoyagerEnv(QuadXBaseEnv):
                 os.dup2(old_fd, 1)
                 os.close(old_fd)
 
-        # # --- create new boundary walls
-        # self.boundary_wall_ids.clear()
-        # self._create_boundary_walls()
+        # --- create new boundary walls (enabled from curriculum stage 1+)
+        self.boundary_wall_ids.clear()
+        if self.walls_enabled:
+            self._create_boundary_walls()
 
         # --- reset waypoint handler, which sets the current target -> create targets manually from voxel grid and overwrite the targets attribute
         self.waypoints.reset(self.env, self.np_random)
@@ -285,6 +287,7 @@ class VectorVoyagerEnv(QuadXBaseEnv):
         self.target_distance_range = stage['target_distance_range']
         self.obstacle_placement = stage['obstacle_placement']
         self.obstacle_distance_range = stage['obstacle_distance_range']
+        self.walls_enabled = stage.get('walls_enabled', False)
 
     # called in reset()
     def _create_targets(self) -> np.ndarray:

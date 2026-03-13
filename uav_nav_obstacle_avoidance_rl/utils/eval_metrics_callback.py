@@ -36,6 +36,7 @@ class CustomEvalCallback(EvalCallback):
 
     def __init__(self, *args, **kwargs):
         self.exp_analysis = kwargs.pop("exp_analysis", True)
+        self.curriculum_callback = kwargs.pop("curriculum_callback", None)
         seed = kwargs.pop("seed", None)
 
         # initialize parent with remaining kwargs
@@ -367,10 +368,12 @@ class CustomEvalCallback(EvalCallback):
                 # ep_sum_eval = per-episode reward sum, averaged over the eval cycle
                 reward_component_metrics[f"eval_cycle_cum_reward/{component_name}"] = float(np.mean(sums))
 
+        success_rate = np.mean(self.current_eval_cycle_data["success"])
+
         eval_metrics = {
             # success = all targets reached AND no collision
             # _cycle suffix = averaged over all episodes in this eval cycle
-            "eval_cycle/success_rate": np.mean(self.current_eval_cycle_data["success"]),
+            "eval_cycle/success_rate": success_rate,
             "eval_cycle/collision_rate": np.mean(self.current_eval_cycle_data["collision"]),
             "eval_cycle/targets_reached": np.mean(self.current_eval_cycle_data["targets_reached"]),
             "eval_cycle/num_targets": np.mean(self.current_eval_cycle_data["num_targets"]),
@@ -382,6 +385,11 @@ class CustomEvalCallback(EvalCallback):
             # reward decomposition
             **reward_component_metrics,
         }
+
+        if self.curriculum_callback is not None:
+            cc = self.curriculum_callback
+            composite = float(success_rate) * ((cc.current_stage_idx + 1) / cc.num_stages)
+            eval_metrics["eval_cycle/composite_success_rate"] = composite
 
         wandb.log(eval_metrics, step=self.num_timesteps)
         logger.info(f"[EvalCallback] Eval cycle logged: {n_episodes} episodes, "
@@ -601,34 +609,6 @@ class CustomEvalCallback(EvalCallback):
                     line=dict(color='rgba(100,100,200,0.25)', width=1),
                     showlegend=False, hoverinfo='skip',
                 ))
-
-                # occupied cells as shaded quads on the floor
-                occ_indices = np.argwhere(grid_state)  # shape (N, 2)
-                if len(occ_indices) > 0:
-                    # build a Mesh3d with two triangles per occupied cell
-                    vx, vy, vz = [], [], []
-                    fi, fj, fk = [], [], []
-                    for idx, (ci, cj) in enumerate(occ_indices):
-                        cx0 = x_min + ci * cell_size
-                        cx1 = cx0 + cell_size
-                        cy0 = y_min + cj * cell_size
-                        cy1 = cy0 + cell_size
-                        base = idx * 4
-                        vx += [cx0, cx1, cx1, cx0]
-                        vy += [cy0, cy0, cy1, cy1]
-                        vz += [z_min, z_min, z_min, z_min]
-                        fi += [base, base + 1]
-                        fj += [base + 1, base + 2]
-                        fk += [base + 2, base + 3]
-                    fig.add_trace(go.Mesh3d(
-                        x=vx, y=vy, z=vz,
-                        i=fi, j=fj, k=fk,
-                        color='#ff5050',
-                        opacity=0.35,
-                        name='Occupied cells',
-                        showlegend=True,
-                        hovertemplate='Occupied cell<extra></extra>',
-                    ))
 
                 verts = np.array([
                     [x_min, y_min, z_min], [x_max, y_min, z_min],

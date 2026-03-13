@@ -97,6 +97,7 @@ def _train(
 
     if curriculum_config.pop('enabled', False):
         curriculum_callback = CurriculumCallback(**curriculum_config, verbose=params.verbose, eval_env=vec_env_eval)
+        eval_callback.curriculum_callback = curriculum_callback
         callbacks.append(curriculum_callback)
 
     model = PPO(
@@ -117,7 +118,7 @@ def _train(
     )
 
 """
-uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train run-train --exp-name "exp" --wandb-tags tag1 --timesteps 2_000_000 --eval-freq 200_000                      
+uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train run-train --exp-name "name" --wandb-tags exp- --timesteps 2_000_000 --eval-freq 200_000                      
 """
 @app.command()
 def run_train(

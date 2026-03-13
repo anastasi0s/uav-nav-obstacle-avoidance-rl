@@ -3,4 +3,4 @@ name: three
 
 parameters:
   seed:
-    values: [9, 7, 4]
+    values: [7, 4]

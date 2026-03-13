@@ -103,10 +103,10 @@ class NormalizeObservationWrapper(gym.ObservationWrapper):
 
     def observation(self, obs):
         result = {
-            # "attitude": (obs["attitude"] - self._att_offset) / self._att_scale,
-            "attitude": obs["attitude"],
-            # "target_deltas": obs["target_deltas"] / self._target_scale,
-            "target_deltas": obs["target_deltas"],
+            "attitude": (obs["attitude"] - self._att_offset) / self._att_scale,
+            # "attitude": obs["attitude"],
+            "target_deltas": obs["target_deltas"] / self._target_scale,
+            # "target_deltas": obs["target_deltas"],
         }
 
         if self._has_lidar and "lidar" in obs:

@@ -1,8 +1,8 @@
 method: bayes
-name: exp-5-reward-sweep
+name: exp-6-reward-sweep
 metric:
   goal: maximize
-  name: curriculum/composite_success_rate
+  name: eval_cycle/composite_success_rate
 
 parameters:
   # Custom reward parameters
@@ -18,24 +18,24 @@ parameters:
                 max: 8.0
               d_thresh:
                 distribution: uniform
-                min: 0.4
-                max: 3.0
+                min: 0.2
+                max: 5.0
               w_prog:
                 distribution: uniform
-                min: 2.0
+                min: 0.5
                 max: 10.0
               w_obs:
                 distribution: uniform
                 min: 0.001
-                max: 6.0
+                max: 8.0
               collision_penalty:
                 distribution: uniform
                 min: 5.0
-                max: 40.0
+                max: 20.0
               target_reached_bonus:
                 distribution: uniform
                 min: 5.0
-                max: 40.0
+                max: 20.0
               step_penalty:
                 distribution: log_uniform_values
                 min: 0.0005

@@ -602,34 +602,6 @@ class CustomEvalCallback(EvalCallback):
                     showlegend=False, hoverinfo='skip',
                 ))
 
-                # occupied cells as shaded quads on the floor
-                occ_indices = np.argwhere(grid_state)  # shape (N, 2)
-                if len(occ_indices) > 0:
-                    # build a Mesh3d with two triangles per occupied cell
-                    vx, vy, vz = [], [], []
-                    fi, fj, fk = [], [], []
-                    for idx, (ci, cj) in enumerate(occ_indices):
-                        cx0 = x_min + ci * cell_size
-                        cx1 = cx0 + cell_size
-                        cy0 = y_min + cj * cell_size
-                        cy1 = cy0 + cell_size
-                        base = idx * 4
-                        vx += [cx0, cx1, cx1, cx0]
-                        vy += [cy0, cy0, cy1, cy1]
-                        vz += [z_min, z_min, z_min, z_min]
-                        fi += [base, base + 1]
-                        fj += [base + 1, base + 2]
-                        fk += [base + 2, base + 3]
-                    fig.add_trace(go.Mesh3d(
-                        x=vx, y=vy, z=vz,
-                        i=fi, j=fj, k=fk,
-                        color='#ff5050',
-                        opacity=0.35,
-                        name='Occupied cells',
-                        showlegend=True,
-                        hovertemplate='Occupied cell<extra></extra>',
-                    ))
-
                 verts = np.array([
                     [x_min, y_min, z_min], [x_max, y_min, z_min],
                     [x_max, y_max, z_min], [x_min, y_max, z_min],

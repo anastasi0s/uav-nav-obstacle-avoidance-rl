@@ -117,7 +117,7 @@ def _train(
     )
 
 """
-uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train run-train --exp-name "exp" --wandb-tags tag1 --timesteps 2_000_000 --eval-freq 200_000                      
+uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train run-train --exp-name "name" --wandb-tags exp- --timesteps 2_000_000 --eval-freq 200_000                      
 """
 @app.command()
 def run_train(

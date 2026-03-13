@@ -84,6 +84,7 @@ curriculum:
       obstacle_distance_range: null
       num_targets: 1                # NOTE!!! policy can't handle varying num of targets -> adjust observations before changing num of targets mid-training
       target_distance_range: null
+      walls_enabled: false
 
     - stage: 1
       desc: "A few obstacles along the flight path"
@@ -94,6 +95,7 @@ curriculum:
       obstacle_distance_range: [6.0, 8.0]
       num_targets: 1
       target_distance_range: [10.0, 12.0]
+      walls_enabled: true
 
     - stage: 2
       desc: "More obstacles, introduce boxes"
@@ -104,6 +106,7 @@ curriculum:
       obstacle_distance_range: [1.0, 8.0]
       num_targets: 1
       target_distance_range: [3.0, 8.0]
+      walls_enabled: true
 
     - stage: 3
       desc: "Dense, mixed shapes and sizes"
@@ -114,6 +117,7 @@ curriculum:
       obstacle_distance_range: null
       num_targets: 1
       target_distance_range: [4.0, 10.0]
+      walls_enabled: true
 
     - stage: 4
       desc: "Dense field, longer distances"
@@ -124,6 +128,7 @@ curriculum:
       obstacle_distance_range: null
       num_targets: 1
       target_distance_range: [5.0, 12.0]
+      walls_enabled: true
 
     - stage: 5
       desc: "Full difficulty — any distance, dense obstacles"
@@ -134,6 +139,7 @@ curriculum:
       obstacle_distance_range: null
       num_targets: 1
       target_distance_range: null           # unconstrained
+      walls_enabled: true
 
 # ── PPO Hyperparameters ──────────────────────────────────────
 ppo:

@@ -164,12 +164,12 @@ def run_train(
 
 """
 # terminal 1: create new sweep 
-uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep ---exp-name "name" --wandb-tags exp- --count 25
+uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --exp-name "name" --wandb-tags exp- --count 25
 # with custom sweep config:
-uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep ---exp-name "name" --wandb-tags exp- --sweep-config uav_nav_obstacle_avoidance_rl/modeling/exp-6-sweep.yaml --count 25
+uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --exp-name "name" --wandb-tags exp- --sweep-config uav_nav_obstacle_avoidance_rl/modeling/exp-6-sweep.yaml --count 25
 
 # terminal 2: join existing sweep 
-uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep ---exp-name "name" --wandb-tags exp- --sweep-id abc123 --count 25
+uv run python -m uav_nav_obstacle_avoidance_rl.modeling.train sweep --exp-name "name" --wandb-tags exp- --sweep-id abc123 --count 25
 """
 @app.command()
 def sweep(

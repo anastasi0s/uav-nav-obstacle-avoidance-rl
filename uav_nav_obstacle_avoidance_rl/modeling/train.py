@@ -97,6 +97,7 @@ def _train(
 
     if curriculum_config.pop('enabled', False):
         curriculum_callback = CurriculumCallback(**curriculum_config, verbose=params.verbose, eval_env=vec_env_eval)
+        eval_callback.curriculum_callback = curriculum_callback
         callbacks.append(curriculum_callback)
 
     model = PPO(

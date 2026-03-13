@@ -36,6 +36,7 @@ class CustomEvalCallback(EvalCallback):
 
     def __init__(self, *args, **kwargs):
         self.exp_analysis = kwargs.pop("exp_analysis", True)
+        self.curriculum_callback = kwargs.pop("curriculum_callback", None)
         seed = kwargs.pop("seed", None)
 
         # initialize parent with remaining kwargs
@@ -367,10 +368,12 @@ class CustomEvalCallback(EvalCallback):
                 # ep_sum_eval = per-episode reward sum, averaged over the eval cycle
                 reward_component_metrics[f"eval_cycle_cum_reward/{component_name}"] = float(np.mean(sums))
 
+        success_rate = np.mean(self.current_eval_cycle_data["success"])
+
         eval_metrics = {
             # success = all targets reached AND no collision
             # _cycle suffix = averaged over all episodes in this eval cycle
-            "eval_cycle/success_rate": np.mean(self.current_eval_cycle_data["success"]),
+            "eval_cycle/success_rate": success_rate,
             "eval_cycle/collision_rate": np.mean(self.current_eval_cycle_data["collision"]),
             "eval_cycle/targets_reached": np.mean(self.current_eval_cycle_data["targets_reached"]),
             "eval_cycle/num_targets": np.mean(self.current_eval_cycle_data["num_targets"]),
@@ -382,6 +385,11 @@ class CustomEvalCallback(EvalCallback):
             # reward decomposition
             **reward_component_metrics,
         }
+
+        if self.curriculum_callback is not None:
+            cc = self.curriculum_callback
+            composite = float(success_rate) * ((cc.current_stage_idx + 1) / cc.num_stages)
+            eval_metrics["eval_cycle/composite_success_rate"] = composite
 
         wandb.log(eval_metrics, step=self.num_timesteps)
         logger.info(f"[EvalCallback] Eval cycle logged: {n_episodes} episodes, "

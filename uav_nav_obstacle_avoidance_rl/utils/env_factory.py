@@ -55,7 +55,7 @@ def make_flat_voyager(**env_kwargs):
         env = CustomRewardWrapper(env, **reward_kwargs)
 
     # 4. normalization wrappers - normalize actions and observations (works with and without lidar)
-    env = RescaleAction(env, min_action=-1.0, max_action=1.0)
+    # env = RescaleAction(env, min_action=-1.0, max_action=1.0)
     env = NormalizeObservationWrapper(env)
     
     # 5. flatten env

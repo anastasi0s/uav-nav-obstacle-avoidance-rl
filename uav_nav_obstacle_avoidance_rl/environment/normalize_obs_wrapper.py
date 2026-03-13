@@ -103,8 +103,8 @@ class NormalizeObservationWrapper(gym.ObservationWrapper):
 
     def observation(self, obs):
         result = {
-            "attitude": (obs["attitude"] - self._att_offset) / self._att_scale,
-            # "attitude": obs["attitude"],
+            # "attitude": (obs["attitude"] - self._att_offset) / self._att_scale,
+            "attitude": obs["attitude"],
             "target_deltas": obs["target_deltas"] / self._target_scale,
             # "target_deltas": obs["target_deltas"],
         }

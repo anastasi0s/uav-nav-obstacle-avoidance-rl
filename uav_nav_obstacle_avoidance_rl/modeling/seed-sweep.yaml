@@ -1,6 +1,0 @@
-method: grid
-name: exp-seed
-
-parameters:
-  seed:
-    values: [9, 7, 4]

@@ -1,0 +1,6 @@
+method: grid
+name: three
+
+parameters:
+  seed:
+    values: [7, 4]

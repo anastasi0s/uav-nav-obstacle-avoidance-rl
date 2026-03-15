@@ -10,7 +10,7 @@ class LidarObservationWrapper(gym.ObservationWrapper):
     """
     adds raycasting-based obstacle detection to the observation space.
     it is simulating a LiDAR sensor with configurable range and resolution.
-    casts rays from UAV position and returns normalised distances.
+    casts rays from UAV position and returns raw distances.
 
     Args:
         env: the base environment with a PyBullet client accessible via env.env
@@ -39,7 +39,6 @@ class LidarObservationWrapper(gym.ObservationWrapper):
             fov_horizontal: float,
             fov_vertical: float,
             ray_start_offset: float,
-            normalize_distances: bool,
             add_to_obs: Literal["append", "separate", "replace"] = "separate",
     ):
         super().__init__(env)
@@ -104,7 +103,7 @@ class LidarObservationWrapper(gym.ObservationWrapper):
     def _setup_observation_space(self):
         """config the new observation space with LIDAR data"""
         lidar_space = spaces.Box(
-            low=self.min_range,
+            low=0.0,
             high=self.max_range,
             shape=(self.num_rays_total,),
             dtype=np.float32,

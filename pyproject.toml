@@ -30,6 +30,7 @@ dependencies = [
     "dunamai==1.23.1",
     "executing==2.2.0",
     "Farama-Notifications==0.0.4",
+    "ffmpeg>=1.4",
     "filelock==3.18.0",
     "fonttools==4.56.0",
     "fsspec==2025.3.0",

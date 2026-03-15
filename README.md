@@ -2,6 +2,8 @@
 
 > Reinforcement Learning-based autonomous UAV navigation with obstacle avoidance in 3D environments using curriculum learning – Bachelor Thesis.
 
+**[Read the full thesis (PDF)](thesis.pdf)**
+
 <!-- PLACEHOLDER: drag and drop an overview image here (e.g., architecture diagram or simulation screenshot) -->
 
 ---
@@ -9,7 +11,7 @@
 ## Table of Contents
 
 - [Abstract](#abstract)
-- [Demo](#demo)
+<!-- - [Demo](#demo) -->
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -27,9 +29,9 @@
 
 This project trains a quadrotor UAV to autonomously navigate toward waypoints while avoiding obstacles in a 3D environment. The agent is trained using **Proximal Policy Optimization (PPO)** with **curriculum learning** that progressively increases environment difficulty — from open-space flight to dense obstacle fields. The UAV perceives its surroundings through a simulated **360-degree LiDAR** sensor and is controlled via velocity commands. Training and evaluation are tracked with **Weights & Biases**.
 
----
+<!-- --- -->
 
-## Demo
+<!-- ## Demo
 
 ### 3D Trajectory Plots
 
@@ -41,7 +43,7 @@ This project trains a quadrotor UAV to autonomously navigate toward waypoints wh
 
 |             Stage 4 — Around Target             |           Stage 5 — Dense Near Target           |
 | :----------------------------------------------: | :----------------------------------------------: |
-| <!-- PLACEHOLDER: stage 4 screenshot --> | <!-- PLACEHOLDER: stage 5 screenshot --> |
+| <!-- PLACEHOLDER: stage 4 screenshot --> | <!-- PLACEHOLDER: stage 5 screenshot --> | -->
 
 ---
 

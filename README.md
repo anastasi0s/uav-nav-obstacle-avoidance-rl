@@ -43,7 +43,7 @@ This project trains a quadrotor UAV to autonomously navigate toward waypoints wh
 
 |             Stage 4 — Around Target             |           Stage 5 — Dense Near Target           |
 | :----------------------------------------------: | :----------------------------------------------: |
-| <!-- PLACEHOLDER: stage 4 screenshot --> | <!-- PLACEHOLDER: stage 5 screenshot --> | -->
+| <!-- PLACEHOLDER: stage 4 screenshot --> | PLACEHOLDER: stage 5 screenshot --> |
 
 ---
 

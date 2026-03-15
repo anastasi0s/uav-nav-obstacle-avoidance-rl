@@ -88,35 +88,35 @@ curriculum:
 
     - stage: 1
       desc: "random field, semi-dense"
-      num_obstacles_range: [30, 50]
+      num_obstacles_range: [50, 80]
       obstacle_shapes: ["cylinder", "box", "sphere"]
       obstacle_size_range: [0.4, 1.0]
       obstacle_placement: "random"
-      obstacle_distance_range: [5.0, 24.0]
+      obstacle_distance_range: [3.0, 18.0]
       num_targets: 1
-      target_distance_range: [40.0, 50.0]
+      target_distance_range: [15.0, 20.0]
       walls_enabled: true
 
     - stage: 2
       desc: " along path field, semi-dense"
-      num_obstacles_range: [30, 50]
+      num_obstacles_range: [10, 30]
       obstacle_shapes: ["cylinder", "box", "sphere"]
       obstacle_size_range: [0.2, 1.0]
       obstacle_placement: "along_path"
-      obstacle_distance_range: [5.0, 24.0]
+      obstacle_distance_range: [3.0, 18.0]
       num_targets: 1
-      target_distance_range: [5.0, 24.0]
+      target_distance_range: [18.0, 24.0]
       walls_enabled: true
 
     - stage: 3
       desc: "random field, dense, closer obstacles"
-      num_obstacles_range: [60, 100]
+      num_obstacles_range: [80, 120]
       obstacle_shapes: ["cylinder", "box", "sphere"]
       obstacle_size_range: [0.4, 1.0]
       obstacle_placement: "random"
-      obstacle_distance_range: [3.0, 24.0]
+      obstacle_distance_range: [1.0, 22.0]
       num_targets: 1
-      target_distance_range: [5.0, 24.0]
+      target_distance_range: [20.0, 24.0]
       walls_enabled: true
 
     - stage: 4
@@ -125,7 +125,7 @@ curriculum:
       obstacle_shapes: ["cylinder", "box", "sphere"]
       obstacle_size_range: [0.2, 1.0]
       obstacle_placement: "around_target"
-      obstacle_distance_range: [6.0, 10.0]         # around target
+      obstacle_distance_range: [6.0, 12.0]         # around target
       num_targets: 1
       target_distance_range: [15.0, 20.0]
       walls_enabled: true
